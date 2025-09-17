@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Red Skullz Playground</title>
+  <meta name="description" content="A loud, crazy community page — find the Skull Cat, earn points and unlock secrets!" />
+
+  <!-- Basic styles + variables -->
+  <style>
+    :root{
+      --bg:#0a0000; /* super dark */
+      --red:#ff2b2b;
+      --yellow:#ffd82b;
+      --black:#000000;
+      --glass: rgba(255,255,255,0.04);
+      --neon: 0 0 12px rgba(255,43,43,0.75), 0 0 30px rgba(255,216,43,0.2);
+      --pop: cubic-bezier(.2,1.5,.5,1);
+      --accent-1: var(--red);
+      --accent-2: var(--yellow);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:radial-gradient(circle at 10% 10%, rgba(255,43,43,0.03), transparent 8%), radial-gradient(circle at 90% 90%, rgba(255,216,43,0.03), transparent 12%), var(--bg);color:#fff;overflow-x:hidden}
+
+    /* particle canvas fills behind everything */
+    #particle-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+    .site{position:relative;z-index:2;min-height:100vh;display:flex;flex-direction:column}
+
+    header{display:flex;align-items:center;justify-content:space-between;padding:22px;backdrop-filter: blur(6px);}
+    .logo{display:flex;gap:12px;align-items:center}
+
+    .logo .skull{width:60px;height:60px;background:linear-gradient(135deg,var(--red),#a10000);border-radius:12px;display:grid;place-items:center;box-shadow:var(--neon);transform:rotate(-8deg);}
+    .logo h1{margin:0;font-size:20px;letter-spacing:1px}
+
+    nav{display:flex;gap:10px}
+    .btn{background:linear-gradient(180deg,rgba(255,255,255,0.03),transparent);border:1px solid rgba(255,255,255,0.06);padding:8px 14px;border-radius:12px;cursor:pointer;transition:transform .18s var(--pop),box-shadow .15s;box-shadow:0 2px 10px rgba(0,0,0,0.6)}
+    .btn:hover{transform:translateY(-6px) scale(1.02);box-shadow:var(--neon)}
+
+    main{display:flex;gap:28px;align-items:flex-start;padding:36px}
+    .col{flex:1;min-width:300px}
+
+    /* big flashy hero */
+    .hero{padding:28px;border-radius:18px;background:linear-gradient(135deg, rgba(255,43,43,0.06), rgba(0,0,0,0.35));border:1px solid rgba(255,43,43,0.12);box-shadow:0 10px 40px rgba(0,0,0,0.6)}
+    .hero h2{font-size:36px;margin:6px 0;text-shadow:0 2px 20px rgba(255,20,20,0.18)}
+    .sparkles{position:relative}
+
+    /* crazy floating items */
+    .floaters{position:absolute;inset:0;pointer-events:none}
+    .floater{position:absolute;opacity:.9}
+
+    /* skullcat area */
+    .hunt{margin-top:18px;padding:18px;border-radius:12px;background:linear-gradient(180deg, rgba(255,216,43,0.045), transparent);border:1px dashed rgba(255,216,43,0.08)}
+    .skullcat-spot{height:220px;border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden;background:linear-gradient(90deg, rgba(0,0,0,0.05), rgba(255,43,43,0.02))}
+
+    .skullcat{position:absolute;width:80px;height:80px;background-size:cover;background-position:center;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.65);transform:scale(.85);transition:transform .2s ease}
+    .skullcat:hover{transform:scale(1);filter:drop-shadow(0 6px 18px rgba(255,43,43,0.25))}
+
+    .points{font-weight:800;font-size:18px;color:var(--yellow)}
+
+    /* secret panel (initially hidden) */
+    .secret{display:none;margin-top:18px;padding:14px;border-radius:12px;background:linear-gradient(90deg, rgba(255,43,43,0.02), rgba(0,0,0,0.07));}
+
+    /* footer weirdness */
+    footer{padding:18px;text-align:center;font-size:13px;opacity:.9}
+
+    /* neon ribbons */
+    .ribbon{position:fixed;right:-10%;top:10%;transform:rotate(15deg);font-weight:900;font-size:26px;letter-spacing:8px;padding:10px 24px;border-radius:12px;background:linear-gradient(90deg,var(--red),var(--yellow));color:#111;box-shadow:var(--neon);opacity:.85}
+
+    /* small screens */
+    @media (max-width:800px){main{flex-direction:column;padding:18px}.logo h1{font-size:16px}.hero h2{font-size:28px}}
+  </style>
+</head>
+<body>
+  <canvas id="particle-canvas"></canvas>
+  <div class="site">
+    <header>
+      <div class="logo">
+        <div class="skull" aria-hidden>
+          <!-- simple ASCII skull to look like a logo -->
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C8 2 5 5 5 9v2a3 3 0 0 0 2 2.8V16l-1 2h10l-1-2v-2.2A3 3 0 0 0 19 11V9c0-4-3-7-7-7z" fill="#2b2b2b"/>
+            <circle cx="9.5" cy="11" r="1.4" fill="#fff"/>
+            <circle cx="14.5" cy="11" r="1.4" fill="#fff"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Red Skullz Playground</h1>
+          <div style="font-size:12px;opacity:.8">Find the Skull Cat • Earn points • Unlock secrets</div>
+        </div>
+      </div>
+      <nav>
+        <button class="btn" id="btn-hunt">Hunt the Skull Cat</button>
+        <button class="btn" id="btn-shop">Rewards</button>
+        <button class="btn" id="btn-secret">Secrets</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="col hero">
+        <div class="sparkles">
+          <h2>Welcome to the loudest corner of the web</h2>
+          <p>Explosions of red, neon, and chaos. Click and explore — hidden things everywhere. Earn <span class="points" id="score">0</span> points.</p>
+
+          <div class="hunt">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>Current points: <span class="points" id="score-top">0</span></div>
+              <div style="font-size:12px;opacity:.8">Tip: press the <strong>Konami code</strong> or click the moon at the top-right for a surprise.</div>
+            </div>
+
+            <div class="skullcat-spot" id="play-area">
+              <!-- skullcat elements will be generated by JS. Add your skull cat image at assets/skullcat.png or it will show a placeholder. -->
+              <div class="floater" style="left:6%;top:8%"><svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 2l1.6 3.2L17 6l-2 2 0 4-3 2-3-2 0-4L7 6l3.4-.8L12 2z" fill="#fff" opacity="0.06"></path></svg></div>
+            </div>
+
+            <div style="display:flex;gap:12px;margin-top:12px">
+              <button class="btn" id="btn-spawn">Spawn Skull Cat</button>
+              <button class="btn" id="btn-randomize">Shuffle Playground</button>
+              <button class="btn" id="btn-reset">Reset Points</button>
+            </div>
+          </div>
+
+          <div class="secret" id="secret-panel">
+            <h3>SECRET VAULT</h3>
+            <p>Unlocked content will appear here. (Try the Konami code!)</p>
+            <div id="secret-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="col">
+        <div class="hero" style="padding:18px">
+          <h3>Mini-games & Odds</h3>
+          <ul>
+            <li>Click randomized skull cats to earn points (stored in your browser).</li>
+            <li>Find hidden clickable moons, cats and shadows.</li>
+            <li>Enter secret codes to multiply points.</li>
+          </ul>
+          <hr style="opacity:.07;margin:12px 0">
+          <div><button class="btn" id="btn-leader">Local leaderboard</button></div>
+        </div>
+
+        <div class="hero" style="margin-top:16px;padding:14px;font-size:14px">
+          <h4 style="margin:4px 0">Easter-egg: Konami</h4>
+          <p style="margin:4px 0;opacity:.9">Up, Up, Down, Down, Left, Right, Left, Right, B, A — do it anytime to unlock a secret theme and 500 points.</p>
+        </div>
+      </aside>
+    </main>
+
+    <div class="ribbon" id="moon" title="click me">🌙 MOON</div>
+
+    <footer>
+      Made with too much caffeine and way too many sparkles. Save this repo as <code>index.html</code> in your GitHub Pages repo. Put assets in <code>/assets/</code>.
+    </footer>
+  </div>
+
+  <script>
+    // -- Basic state and utilities
+    const scoreKey = 'rsk_score_v1';
+    const unlocksKey = 'rsk_unlocks_v1';
+    let score = parseInt(localStorage.getItem(scoreKey) || '0');
+    let unlocks = JSON.parse(localStorage.getItem(unlocksKey) || '[]');
+
+    const scoreEl = document.getElementById('score');
+    const scoreTop = document.getElementById('score-top');
+    const playArea = document.getElementById('play-area');
+    const secretPanel = document.getElementById('secret-panel');
+    const secretList = document.getElementById('secret-list');
+
+    function updateScoreUI(){
+      scoreEl.textContent = score;
+      scoreTop.textContent = score;
+    }
+    function save(){localStorage.setItem(scoreKey, String(score));localStorage.setItem(unlocksKey, JSON.stringify(unlocks));}
+
+    updateScoreUI();
+
+    // -- spawn a skull cat randomly inside play area
+    function spawnSkullCat({x=null,y=null,points=25} = {}){
+      const el = document.createElement('div');
+      el.className = 'skullcat';
+      // image fallback; user should add assets/skullcat.png
+      el.style.backgroundImage = 'url(assets/skullcat.png), linear-gradient(135deg,var(--red),#aa0000)';
+
+      const rect = playArea.getBoundingClientRect();
+      const w = Math.max(60, Math.min(120, rect.width * 0.18));
+      el.style.width = w + 'px';
+      el.style.height = w + 'px';
+
+      const px = (x === null) ? Math.random() * (rect.width - w) : x;
+      const py = (y === null) ? Math.random() * (rect.height - w) : y;
+      el.style.left = px + 'px';
+      el.style.top = py + 'px';
+
+      // random rotation
+      el.style.transform = 'rotate(' + (Math.random()*30-15) + 'deg) scale(.9)';
+
+      // click handler
+      el.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        // pop animation
+        el.style.transition = 'transform .25s cubic-bezier(.2,.9,.3,1),opacity .5s';
+        el.style.transform += ' scale(1.18)';
+        el.style.opacity = '0';
+        setTimeout(()=>el.remove(),500);
+
+        // award points
+        score += points;
+        // little burst
+        tinyBurst(parseFloat(el.style.left)+w/2, parseFloat(el.style.top)+w/2);
+        updateScoreUI();
+        save();
+      });
+
+      // double-click to get a secret 777 points if Konami theme unlocked
+      el.addEventListener('dblclick', ()=>{
+        if(unlocks.includes('konami')){score += 777; updateScoreUI(); save(); showToast('Lucky double! +777');}
+      });
+
+      playArea.appendChild(el);
+
+      // remove after 20s if not clicked
+      setTimeout(()=>{if(document.body.contains(el)) el.remove()},20000);
+      return el;
+    }
+
+    document.getElementById('btn-spawn').addEventListener('click', ()=>spawnSkullCat());
+    document.getElementById('btn-reset').addEventListener('click', ()=>{score=0;unlocks=[];save();updateScoreUI();renderSecrets();showToast('Points and unlocks reset')});
+    document.getElementById('btn-randomize').addEventListener('click', ()=>{
+      // spawn many cats
+      for(let i=0;i<6;i++) spawnSkullCat({points:10});
+      showToast('Shuffle!');
+    });
+
+    document.getElementById('btn-hunt').addEventListener('click', ()=>{
+      // blink and spawn
+      playArea.animate([{filter:'brightness(1.4)'},{filter:'brightness(1)'}],{duration:500,iterations:1});
+      for(let i=0;i<4;i++) spawnSkullCat({points:20});
+    });
+
+    // secret button toggles secret panel
+    document.getElementById('btn-secret').addEventListener('click', ()=>{secretPanel.style.display = secretPanel.style.display === 'block' ? 'none' : 'block'});
+
+    // leader button shows local leaderboard (rudimentary)
+    document.getElementById('btn-leader').addEventListener('click', ()=>{
+      const cp = prompt('Local leaderboard: Enter your name to save your score (this stores in your browser)');
+      if(cp){
+        const all = JSON.parse(localStorage.getItem('rsk_leader_v1')||'[]');
+        all.push({name:cp,score:score,date:new Date().toISOString()});
+        all.sort((a,b)=>b.score-a.score);
+        localStorage.setItem('rsk_leader_v1', JSON.stringify(all.slice(0,15)));
+        alert('Saved — current top:\n' + all.slice(0,8).map((x,i)=>`${i+1}. ${x.name} — ${x.score}`).join('\n'));
+      }
+    });
+
+    // moon click — secret reward
+    document.getElementById('moon').addEventListener('click', ()=>{
+      score += 50;unlocks.push('moontouch');unlocks = Array.from(new Set(unlocks));save();updateScoreUI();renderSecrets();fireworkBurst(window.innerWidth-120,80);showToast('Moon touched! +50');
+    });
+
+    // render secrets
+    function renderSecrets(){
+      secretList.innerHTML = '';
+      if(unlocks.length === 0){secretList.textContent = 'No secrets unlocked yet.';return}
+      unlocks.forEach(u=>{
+        const d = document.createElement('div');d.style.margin='6px 0';d.textContent = '• ' + u;secretList.appendChild(d)
+      })
+    }
+    renderSecrets();
+
+    // tiny particle burst (for clicks)
+    function tinyBurst(x,y){
+      const c = document.createElement('canvas');
+      c.width = 200; c.height = 200; c.style.position='absolute'; c.style.left = (x-100)+'px'; c.style.top = (y-100)+'px'; c.style.pointerEvents='none'; c.style.zIndex=9999; document.body.appendChild(c);
+      const ctx = c.getContext('2d');
+      let parts = [];
+      for(let i=0;i<18;i++){parts.push({x:100,y:100, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.9)*6, life:60, col: Math.random()>0.5?getComputedStyle(document.documentElement).getPropertyValue('--red'):getComputedStyle(document.documentElement).getPropertyValue('--yellow')})}
+      let t=0; const id = setInterval(()=>{
+        ctx.clearRect(0,0,200,200);
+        parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.18;p.life--;ctx.fillStyle = p.col; ctx.fillRect(p.x,p.y,4,4)});
+        t++; if(t>70){clearInterval(id); c.remove()}
+      },16);
+    }
+
+    // small toast messages
+    function showToast(txt){
+      const t = document.createElement('div');t.textContent = txt; t.style.position='fixed';t.style.right='18px';t.style.bottom='18px';t.style.padding='10px 14px';t.style.borderRadius='10px';t.style.background='linear-gradient(90deg,var(--red),var(--yellow))';t.style.color='#110';t.style.fontWeight='700';t.style.zIndex=99999;document.body.appendChild(t);setTimeout(()=>{t.style.transition='transform .35s,opacity .35s';t.style.transform='translateY(20px)';t.style.opacity='0';},1500);setTimeout(()=>t.remove(),2200);
+    }
+
+    // simple Konami code detector
+    const konami = [38,38,40,40,37,39,37,39,66,65]; let kpos=0;
+    window.addEventListener('keydown', (e)=>{
+      if(e.keyCode === konami[kpos]){kpos++; if(kpos === konami.length){kpos=0; unlocks.push('konami');unlocks = Array.from(new Set(unlocks));score += 500;save();renderSecrets();updateScoreUI();applyKonamiTheme();showToast('Konami unlocked! +500')}} else kpos = (e.keyCode === konami[0])?1:0;
+    });
+
+    function applyKonamiTheme(){
+      document.body.style.background = 'linear-gradient(45deg,#120001,#200000)';
+      document.querySelectorAll('.ribbon').forEach(r=>r.style.display='none');
+      // drop confetti
+      for(let i=0;i<12;i++) spawnSkullCat({points:30});
+    }
+
+    // small fireworks
+    function fireworkBurst(x,y){
+      // spawn many tiny bursts
+      for(let i=0;i<14;i++) tinyBurst(x + (Math.random()-0.5)*120, y + (Math.random()-0.5)*120);
+    }
+
+    // particle background (simple)
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    let w=0,h=0,particles=[];
+    function resize(){w=canvas.width=innerWidth;h=canvas.height=innerHeight;particles = Array.from({length:Math.max(24, Math.floor(w*h/50000))}).map(()=>({x:Math.random()*w,y:Math.random()*h, r:Math.random()*2+1, vx:(Math.random()-0.5)/1.4, vy:(Math.random()-0.5)/1.4, col: Math.random()>0.7?getComputedStyle(document.documentElement).getPropertyValue('--yellow'):getComputedStyle(document.documentElement).getPropertyValue('--red')}))}
+    addEventListener('resize', resize); resize();
+    function frame(){ ctx.clearRect(0,0,w,h); particles.forEach(p=>{p.x+=p.vx; p.y+=p.vy; if(p.x<0) p.x=w; if(p.x> w) p.x=0; if(p.y<0) p.y=h; if(p.y>h) p.y=0; ctx.beginPath(); ctx.fillStyle=p.col; ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();}); requestAnimationFrame(frame)}
+    frame();
+
+    // click anywhere to spawn tiny cat
+    playArea.addEventListener('click', (e)=>{
+      const rect = playArea.getBoundingClientRect();
+      const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+      spawnSkullCat({x: x - 40, y: y - 40, points:15});
+      tinyBurst(e.clientX, e.clientY);
+    });
+
+    // playful secret: click top-right area too fast to reveal secret panel
+    let moonClicks = 0; document.getElementById('moon').addEventListener('dblclick', ()=>{unlocks.push('moondbl');unlocks = Array.from(new Set(unlocks));score += 120;save();renderSecrets();showToast('Moon double! +120')});
+
+    // load any previously saved unlocks
+    (function(){unlocks = JSON.parse(localStorage.getItem(unlocksKey) || '[]'); if(unlocks.includes('konami')) applyKonamiTheme(); renderSecrets();})();
+
+    // little instruction: if skullcat image missing, show placeholder and instructions
+    (function checkAssets(){
+      const img = new Image(); img.src = 'assets/skullcat.png'; img.onload = ()=>{}; img.onerror = ()=>{
+        const p = document.createElement('div'); p.style.position='absolute'; p.style.right='14px'; p.style.top='100px'; p.style.padding='8px 12px'; p.style.borderRadius='10px'; p.style.background='rgba(255,255,255,0.04)'; p.style.fontSize='13px'; p.innerHTML = 'Add a skull cat image at <code>/assets/skullcat.png</code> to replace placeholders.'; document.body.appendChild(p);
+      }
+    })();
+
+    // tiny startup sparkle
+    setTimeout(()=>{for(let i=0;i<6;i++) spawnSkullCat({points:12})},700);
+  </script>
+</body>
+</html>

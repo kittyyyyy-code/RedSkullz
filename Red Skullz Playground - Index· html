@@ -56,21 +56,51 @@
     padding:20px;
     position:relative;
   }
+  /* Red Skullz Kitty with CSS */
   .skullcat {
-    width:80px;
-    height:80px;
-    background:url('https://i.ibb.co/2sGg6Kb/red-skullz-kitty.png') center/cover no-repeat;
+    width:60px;
+    height:60px;
+    background:red;
+    border-radius:50%;
     position:absolute;
     cursor:pointer;
     animation:bounce 1s infinite alternate;
   }
+  .skullcat::before, .skullcat::after {
+    content:'';
+    position:absolute;
+    width:15px;
+    height:15px;
+    background:black;
+    border-radius:50%;
+    top:15px;
+  }
+  .skullcat::before { left:10px; }
+  .skullcat::after { right:10px; }
+
   @keyframes bounce {from{transform:translateY(0);}to{transform:translateY(-30px);}}
+
+  /* Logo with CSS */
   .logo {
-    width:150px;
-    height:150px;
-    background:url('https://i.ibb.co/Yb5y6q0/red-skullz-logo.png') center/cover no-repeat;
+    width:120px;
+    height:120px;
+    background:red;
+    border-radius:50%;
+    position:relative;
     margin:0 auto 20px auto;
   }
+  .logo::before, .logo::after {
+    content:'';
+    position:absolute;
+    width:40px;
+    height:40px;
+    background:black;
+    border-radius:50%;
+    top:20px;
+  }
+  .logo::before { left:20px; }
+  .logo::after { right:20px; }
+
   .secret {
     display:none;
     margin:20px;
@@ -123,10 +153,12 @@
 Red Skullz Community — Save as <code>index.html</code><br>
 Join our Discord: <a href="https://discord.gg/eZrfmUyw" target="_blank">Click Here</a>
 </footer>
+
 <script>
 let score=0;
 const play=document.getElementById('play-area');
 const miniGames=document.getElementById('mini-games');
+
 function makeSparks(x,y){
   for(let i=0;i<15;i++){
     const s=document.createElement('div');
@@ -141,12 +173,13 @@ function makeSparks(x,y){
     setTimeout(()=>s.remove(),600);
   }
 }
+
 function spawnSkullCat(e){
   makeSparks(e.clientX,e.clientY);
   const cat=document.createElement('div');
   cat.className='skullcat';
-  cat.style.left=Math.random()*(play.clientWidth-80)+'px';
-  cat.style.top=Math.random()*(play.clientHeight-80)+'px';
+  cat.style.left=Math.random()*(play.clientWidth-60)+'px';
+  cat.style.top=Math.random()*(play.clientHeight-60)+'px';
   cat.onclick=(ev)=>{
     score+=10;
     makeSparks(ev.clientX,ev.clientY);
@@ -155,11 +188,13 @@ function spawnSkullCat(e){
   };
   play.appendChild(cat);
 }
+
 function unlockSecret(e){
   makeSparks(e.clientX,e.clientY);
   document.getElementById('secret').style.display='block';
   alert('The secret has been revealed!');
 }
+
 function crazyMode(e){
   makeSparks(e.clientX,e.clientY);
   alert('CRAZY MODE ENGAGED! Mini-games activated!');

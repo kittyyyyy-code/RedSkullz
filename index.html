@@ -3,198 +3,211 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Library Kitty: Ren Morikawa Story</title>
+<title>Nekoshi - Library Kitty</title>
 <style>
   body {
     margin:0;
-    font-family: Georgia, serif;
-    background:#fdf6e3;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    background:#fff0f5;
     color:#333;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    padding:20px;
   }
-  h1,h2 {margin:10px 0;}
-  input, textarea {
-    width:90%;
-    max-width:700px;
-    padding:10px;
-    margin:5px 0;
-    border:1px solid #ccc;
-    border-radius:5px;
-  }
-  button {
-    padding:10px 20px;
-    margin:5px;
-    font-weight:bold;
-    border:none;
-    border-radius:5px;
-    cursor:pointer;
-    background:#222;
+  header {
+    background:#ff69b4;
     color:white;
+    padding:15px 20px;
+    text-align:center;
+    font-size:2em;
+    font-weight:bold;
+    position:sticky;
+    top:0;
+    z-index:1000;
+    box-shadow:0 2px 5px rgba(0,0,0,0.2);
   }
-  button:hover {background:#555;}
+  nav {
+    display:flex;
+    justify-content:center;
+    gap:15px;
+    margin:10px 0;
+  }
+  nav button {
+    padding:8px 15px;
+    border:none;
+    border-radius:8px;
+    background:#ffb6c1;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+  }
+  nav button:hover {
+    background:#ff69b4;
+  }
   .book-container {
-    width:90%;
     max-width:700px;
-    height:400px;
-    border:3px solid #333;
-    border-radius:10px;
+    margin:20px auto;
+    border:3px solid #ff69b4;
+    border-radius:15px;
     background:white;
-    box-shadow:0 0 20px rgba(0,0,0,0.3);
-    overflow:hidden;
+    padding:20px;
     position:relative;
-    margin-top:20px;
-    touch-action: pan-y;
+    overflow:hidden;
+    height:70vh;
   }
   .page {
     width:100%;
     height:100%;
-    padding:20px;
-    box-sizing:border-box;
-    position:absolute;
-    top:0;
-    left:0;
-    transition: transform 0.5s ease;
     overflow-y:auto;
     font-size:1.1em;
     line-height:1.6em;
+    padding-right:10px;
   }
-  .page p {margin-bottom:1em;}
   .page-number {
-    position:absolute;
-    bottom:10px;
-    right:20px;
-    font-size:0.9em;
-    color:#666;
-  }
-  .nav-btn {
-    position:absolute;
-    top:50%;
-    transform:translateY(-50%);
-    font-size:2em;
-    background:rgba(0,0,0,0.1);
-    border:none;
-    cursor:pointer;
-    width:40px;
-    height:60px;
-    z-index:10;
-  }
-  .prev-btn {left:0;}
-  .next-btn {right:0;}
-  #chaptersList {
-    width:90%;
-    max-width:700px;
+    text-align:right;
     margin-top:10px;
+    color:#ff69b4;
+    font-weight:bold;
   }
-  .chapter-entry {
-    border:1px solid #333;
-    padding:10px;
-    margin:5px 0;
-    border-radius:5px;
-    background:#eee;
+  .chapter-menu {
+    max-width:700px;
+    margin:10px auto;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .chapter-menu button {
+    background:#ffe4e1;
+    border:none;
+    padding:6px 12px;
+    border-radius:8px;
     cursor:pointer;
+    font-weight:bold;
+  }
+  .chapter-menu button:hover {
+    background:#ffb6c1;
+    color:white;
+  }
+  footer {
+    text-align:center;
+    padding:20px;
+    background:#ff69b4;
+    color:white;
+    font-weight:bold;
+    margin-top:20px;
   }
 </style>
 </head>
 <body>
 
-<h1>Library Kitty</h1>
-<h2>Write a Chapter</h2>
-<textarea id="chapterInput" placeholder="Write your chapter here..."></textarea>
-<button onclick="addChapter()">Add Chapter</button>
+<header>📖 Nekoshi</header>
 
-<h2>Chapters</h2>
-<div id="chaptersList"></div>
+<nav>
+  <button onclick="showChapterMenu()">Chapters</button>
+  <button onclick="goToStart()">Start of Book</button>
+  <button onclick="window.open('https://discord.gg/DGcGSUHs','_blank')">Join Discord</button>
+</nav>
 
-<h2>Book Reader</h2>
-<div class="book-container" id="bookContainer">
-  <button class="nav-btn prev-btn" id="prevBtn">&#8249;</button>
-  <button class="nav-btn next-btn" id="nextBtn">&#8250;</button>
+<div class="chapter-menu" id="chapterMenu" style="display:none;"></div>
+
+<div class="book-container">
+  <div class="page" id="pageContent"></div>
+  <div class="page-number" id="pageNumber"></div>
 </div>
 
+<footer>Library Kitty - Read & Enjoy! 💖</footer>
+
 <script>
-let chapters = JSON.parse(localStorage.getItem('libraryKittyChapters')) || [];
-let currentChapterIndex = 0;
-let currentPageIndex = 0;
+const chapters = [
+`Ren Morikawa stood in front of the school gates, sweat dripping down his back as he stared up at the building like it was a final boss. “Okay,” he muttered, clutching his backpack like a lifeline. “It’s just school. In a new country. With strangers. And maybe cat people. No big deal.” He took one step inside and immediately got bumped by someone with fox ears and a full-on tail, sprinting down the hall with toast in their mouth. Ren blinked. “…I guess that is normal here.” Still reeling from that, he walked toward his classroom, checking the tiny paper in his hand for the room number. The halls were packed, buzzing with chatter, tails swishing, ears twitching, and a lot more fangy smiles than he was used to back home. Then he saw her. She was standing at her locker, fixing her hair—a soft, shiny black bob—and flicking her fluffy cat ears back into place. She had gentle eyes, a soft pink sweater, and a kind of sparkly aura Ren was sure wasn’t real… but maybe it was. He wasn’t even sure how much was real anymore. His heart did a triple flip. “Oh no,” he whispered. “She’s… adorable. I’m doomed.” Just as he was about to turn away and dramatically melt into the floor, she looked up and smiled at him. “Hi! Are you new here?” she asked, walking over like it was no big deal. Ren, brain completely short-circuited, replied: “I—uh. Yeah. Yes. I mean—hello. Yes. New.” Nailed it. “I’m Yui Mizuki,” she said sweetly. “Nice to meet you!” “I’m Ren. Morikawa. Ren Morikawa. I—uh. Wow. You’re so—cat.” (Kill me, Ren thought.) But Yui just giggled. “Yep! I get that a lot.” They walked together to class, talking about stuff like favorite foods, weird dreams, and the fact that Ren once thought soy sauce was chocolate syrup. (“That was one time,” he defended.) When they reached the classroom, the name on the door read: 1-C — Mr. Harada The classroom buzzed with chatter until the door slammed open. In strutted a tall man in a sharp blazer with rolled-up sleeves, bright red glasses, and a smug grin like he just stepped off a runway. His hair was slicked back, and he carried a mug that read #1 Educator (In My Opinion). “Alright, my brilliant little weirdos!” he boomed. “Eyes on me—your beloved, dazzling, impossibly talented homeroom teacher, Fumio Harada!” Everyone went silent. Some rolled their eyes. Others clapped half-heartedly. Ren blinked. “…Is he serious?” Yui leaned over and whispered, “Very.” Harada spun dramatically, finger raised like he was about to give a TED Talk. “This is Class 1-C, the best class in the school—because I say so. You’ll learn things here. Important things. Like why grammar matters and why I’m always right.” He pointed directly at Ren, who jumped in his seat. “You! New kid! Stand up. Name. Favorite color. Weirdest dream. Go!” Ren, who had only just started breathing normally, stood up like a scared deer. “Um—I’m Ren Morikawa. Blue. And… I once dreamed my toothbrush came to life and sued me.” A beat. Harada stared, then nodded solemnly. “Powerful. Disturbing. I like you.” He turned to the class. “Everyone, give our traumatized toothbrush boy a warm welcome!” A few claps. Someone meowed. Ren sat down, face on fire. Yui whispered with a grin, “You’re doing great.” The cafeteria was a whirlwind of tails, ears, and too many different types of rice balls. Ren sat across from Yui at a corner table by the window, trying to look normal while eating rice with chopsticks like he hadn’t just Googled “how to chopstick” last night. “So,” Yui said between bites, “you like it here so far?” “It’s weird,” Ren admitted, “but kind of awesome? I mean, fox people, shark people, teacher with a god complex…” Yui laughed. “You’re adapting fast.” He smiled—then his tray slid an inch toward him on its own. Not much. Just enough to make him pause. Yui didn’t seem to notice. She tapped her chopsticks thoughtfully on her cheek. “Hey, this might be a weird question,” she said, “but what do you think about psychic powers?” Ren froze, chopsticks halfway to his mouth. “Psychic powers?” he echoed “Yeah,” Yui said casually. “Like telekinesis, future sight, barriers. Some people believe it’s real, y’know? Rare, but real.” Ren swallowed. “I mean, sure. I guess anything’s possible.” “Have you ever met someone with powers?” “no, never” His chopstick snapped in half. Yui blinked. “oops” a soft voice cut in. “You’re in my seat.” Ren looked up to see a girl standing over him. She looked completely human—no visible kemonomimi traits at all. Pale skin, long dark hair, sharp, intelligent eyes that felt like they were looking through him. Yui smiled. “Hi, Mio! You wanna sit with us?” Mio Tojo ignored the question and sat down anyway, setting her tray down with precise, silent movements. Her presence was oddly still, almost like she wasn’t moving even when she was. She turned her eyes to Ren. “You’re new.” “Yeah,” he said. “Ren Morikawa. Uh… nice to meet you.” She tilted her head slightly. “You’re not just new. You’re different.” Ren felt a chill roll down his back. “Excuse me?” Mio leaned in, eyes narrowing. “You’ve been leaking energy all day. It’s giving me a headache.” Yui blinked. “Wait—you sense that?” Mio didn’t answer. She just calmly peeled her egg and stared at Ren like he was a puzzle. Ren gave a nervous laugh. “Haha… what energy?” “Have you ever met someone with powers?” “no, never” His chopstick snapped in half. Yui blinked. “oops” a soft voice cut in. “You’re in my seat.” Ren looked up to see a girl standing over him. She looked completely human—no visible kemonomimi traits at all. Pale skin, long dark hair, sharp, intelligent eyes that felt like they were looking through him. Yui smiled. “Hi, Mio! You wanna sit with us?” Mio Tojo ignored the question and sat down anyway, setting her tray down with precise, silent movements. Her presence was oddly still, almost like she wasn’t moving even when she was. She turned her eyes to Ren. “You’re new.” “Yeah,” he said. “Ren Morikawa. Uh… nice to meet you.” She tilted her head slightly. “You’re not just new. You’re different.” Ren felt a chill roll down his back. “Excuse me?” Mio leaned in, eyes narrowing. “You’ve been leaking energy all day. It’s giving me a headache.” Yui blinked. “Wait—you sense that?” Mio didn’t answer. She just calmly peeled her egg and stared at Ren like he was a puzzle. Ren gave a nervous laugh. “Haha… what energy?” “You’re unstable,” she said flatly. Yui leaned over to whisper, “She’s always like this. She’s kind of intense, but she means well.” “Right,” Ren said. “Cool. Intense is… cool.” Mio blinked slowly “You know… your aura smells like a storm.” Ren stared. “Is that a good thing or a bad thing?” Mio shrugged and sipped her juice box. “We’ll find out.” She remained composed. “If something changes… you should tell someone.” Ren raised a brow. “Like a doctor?” Mio shook her head slowly. “Like someone who understands.” Her tone wasn’t threatening—just calm. Factual. Like she was offering advice, not warning him. Ren chuckled, trying to brush it off. “Well, if I suddenly start floating, I’ll call you” Ren sat slouched at his desk in the final class of the day, his chin resting in the palm of his hand as the teacher droned on at the front of the room. So far, things had been oddly normal—especially compared to the weirdness that usually followed him around lately. No psychic flashes. No whispers in his head. Just… math. He let out a quiet sigh, his eyes drifting lazily around the classroom. His gaze eventually landed on two boys sitting a few rows over. He didn’t know their names, just that they were always together, always whispering about someone. Today, that someone seemed to be him. He caught them glancing in his direction, snickering behind their hands like they were five years old. Ren stiffened. His brows drew together slightly in confusion, but underneath that was a sudden wave of self-consciousness. The first boy leaned over to the other and muttered just loud enough for Ren to catch. “Ew, look how skinny he is.” “You think his parents don’t feed him?” The second one smirked and added, “Does he even have parents?” They cracked up, slapping each other’s arms like they’d just won a comedy award. Ren’s heart thudded heavily in his chest. His face flushed, but he didn’t say anything. Instead, he slowly looked down at his arms resting on the desk—thin, wiry, almost fragile. The sleeves of his uniform hung off them slightly, like the clothes weren’t made for him. He clenched his fists beneath the table, his nails digging into his palms. Anger bubbled up in his chest, but he swallowed it. What could he say? What could he do without making it worse? When the bell finally rang, the sound barely registered. Ren moved through the hallway like a ghost, silent and invisible. He reached his locker, opened it with mechanical movements, and started changing out of his indoor shoes. As he pulled them out, a folded slip of paper fluttered to the floor. His breath caught. He stared at it for a second before bending down to pick it up. It was folded sloppily, like whoever wrote it didn’t care if it got crumpled or not. His name wasn’t on it, but he had a feeling it was meant for him. He unfolded it. Scrawled in jagged handwriting were the words: “skinny boney” Ren stared at it in silence. His expression didn’t change at first. Just… blank. Then his lips pulled into a tight, bitter smile. “How creative,” he muttered under his breath, sarcasm coating the words like poison. He crumpled the note into a tight ball and tossed it into the nearby trash bin without hesitation. He didn’t look back at it. He didn’t want to. Without another word, Ren slung his bag over his shoulder and walked out of the school building, the weight of the day sitting heavy on his chest. But he kept walking. Even if his fists were still clenched. Even if his eyes stung. He kept walking. When Ren arrived home, the quiet warmth of the house wrapped around him like a blanket—but it did little to ease the heaviness in his chest. From the kitchen, the scent of stir-fry drifted through the air. His father, David, turned his head slightly, a gentle smile tugging at his face. “Hey, Ren,” he called softly, flipping something in the pan. “How was school? Did you make any friends?” Ren paused in the entryway, his shoes half-off. He glanced toward the kitchen but didn’t quite meet his father’s eyes. “Oh… it was okay,” he said, his voice low. “I made two—I think—friends.” There was uncertainty in his tone, the kind that didn’t go unnoticed. He thought of Mio, her calm, unreadable face and the way her words felt wrapped in riddles. Did she even like him? She was nice—but so hard to read. David nodded slowly, trying to stay positive. “Hey, that’s a start. Two’s more than none, right?” Ren gave a weak smile—more a polite reflex than anything genuine—before turning away. “I’m gonna go to my room,” he mumbled. David’s smile faded as he watched Ren ascend the stairs quietly. Something was off. He could see it in the way Ren walked—shoulders slumped, head down, like the weight of the world was hanging from his spine. But David didn’t want to press. Not yet. He stirred the pan and forced himself to stay put, hoping maybe Ren just needed space. Upstairs, Ren tossed his bag to the floor and flopped down on his bed, the springs groaning under the sudden weight. His gaze fixed on the ceiling, unmoving. The words from earlier echoed in his mind like a scratched-up tape. “Ew, look how skinny he is.” “Does he even have parents?” He clenched his jaw. Why did stuff like that stick with him so easily? Why did people have to be so cruel for no reason? He turned his head to the side, staring at the plain wall next to his bed. His eyes were glassy, unfocused. “Skinny boney.” He scoffed quietly to himself, trying to laugh it off, but it came out more like a breath of defeat. “…They’re just stupid,” he muttered. “They’re not gonna do anything.” Still, a small knot of anxiety sat in his stomach. What if they did? What if this was just the beginning? He pulled his blanket up to his chest, curling slightly, as if trying to shrink into something less noticeable—less… targetable. A soft knock came at the door. “Ren?” his father’s voice called gently from behind the wood. “Dinner’s almost ready.” “I’m not hungry,” Ren replied, a little too quickly. A pause. “Alright… I’ll save you some for later.” Ren didn’t answer. He stared back up at the ceiling, quiet. Downstairs, David sighed as he set the table for one.`,
+`(CHAPTER2) Write your second chapter here...`,
+`(CHAPTER3) Write your third chapter here...`,
+`(CHAPTER4) Write your fourth chapter here...`,
+`(CHAPTER5) Write your fifth chapter here...`
+`(CHAPTER6) Write your sixth chapter here...`,
+`(CHAPTER7) Write your seventh chapter here...`,
+`(CHAPTER8) Write your eighth chapter here...`,
+`(CHAPTER9) Write your ninth chapter here...`,
+`(CHAPTER10) Write your tenth chapter here...`,
+`(CHAPTER11) Write your eleventh chapter here...`,
+`(CHAPTER12) Write your twelfth chapter here...`,
+`(CHAPTER13) Write your thirteenth chapter here...`,
+`(CHAPTER14) Write your fourteenth chapter here...`,
+`(CHAPTER15) Write your fifteenth chapter here...`,
+`(CHAPTER16) Write your sixteenth chapter here...`,
+`(CHAPTER17) Write your seventeenth chapter here...`,
+`(CHAPTER18) Write your eighteenth chapter here...`,
+`(CHAPTER19) Write your nineteenth chapter here...`,
+`(CHAPTER20) Write your twentieth chapter here...`,
+`(CHAPTER21) Write your twenty-first chapter here...`,
+`(CHAPTER22) Write your twenty-second chapter here...`,
+`(CHAPTER23) Write your twenty-third chapter here...`,
+`(CHAPTER24) Write your twenty-fourth chapter here...`,
+`(CHAPTER25) Write your twenty-fifth chapter here...`,
+`(CHAPTER26) Write your twenty-sixth chapter here...`,
+`(CHAPTER27) Write your twenty-seventh chapter here...`,
+`(CHAPTER28) Write your twenty-eighth chapter here...`,
+`(CHAPTER29) Write your twenty-ninth chapter here...`,
+`(CHAPTER30) Write your thirtieth chapter here...`
+];
+
+let currentChapter = 0;
+let currentPage = 0;
 let pages = [];
 
-function splitIntoPages(text, charsPerPage=300){
-  const pages=[];
+function splitIntoPages(text, charsPerPage=500){
+  const result=[];
   let start=0;
   while(start<text.length){
-    pages.push(text.slice(start,start+charsPerPage));
+    result.push(text.slice(start,start+charsPerPage));
     start+=charsPerPage;
   }
-  return pages;
+  return result;
 }
-
-function renderChaptersList(){
-  const list = document.getElementById('chaptersList');
-  list.innerHTML='';
-  chapters.forEach((chapter,idx)=>{
-    const div=document.createElement('div');
-    div.className='chapter-entry';
-    div.textContent = `Chapter ${idx+1}: ${chapter.slice(0,30)}...`;
-    div.onclick = ()=>{openChapter(idx);}
-    list.appendChild(div);
-  });
-}
-
-function addChapter(){
-  const text=document.getElementById('chapterInput').value.trim();
-  if(!text){ alert("Write something first!"); return; }
-  chapters.push(text);
-  localStorage.setItem('libraryKittyChapters', JSON.stringify(chapters));
-  document.getElementById('chapterInput').value='';
-  renderChaptersList();
-  openChapter(chapters.length-1);
-}
-
-function openChapter(idx){
-  currentChapterIndex=idx;
-  currentPageIndex=0;
-  pages=splitIntoPages(chapters[idx]);
-  renderPage();
-}
-
-const bookContainer = document.getElementById('bookContainer');
 
 function renderPage(){
-  bookContainer.querySelectorAll('.page').forEach(p=>p.remove());
-  const pageDiv=document.createElement('div');
-  pageDiv.className='page';
-  pageDiv.innerHTML=`<p>${pages[currentPageIndex].replace(/\n/g,'<br>')}</p>
-  <div class="page-number">${currentPageIndex+1} / ${pages.length} (Chapter ${currentChapterIndex+1})</div>`;
-  bookContainer.appendChild(pageDiv);
+  const pageContent=document.getElementById('pageContent');
+  pageContent.innerHTML = pages[currentPage].replace(/\n/g,'<br>');
+  document.getElementById('pageNumber').innerText=`Chapter ${currentChapter+1} - Page ${currentPage+1} / ${pages.length}`;
 }
 
-// Navigation buttons
-document.getElementById('prevBtn').addEventListener('click', ()=>{
-  if(currentPageIndex>0) currentPageIndex--;
+function goToChapter(index){
+  currentChapter=index;
+  currentPage=0;
+  pages=splitIntoPages(chapters[currentChapter]);
   renderPage();
-});
-document.getElementById('nextBtn').addEventListener('click', ()=>{
-  if(currentPageIndex<pages.length-1) currentPageIndex++;
-  renderPage();
-});
+  document.getElementById('chapterMenu').style.display='none';
+}
 
-// Touch swipe
+function showChapterMenu(){
+  const menu=document.getElementById('chapterMenu');
+  menu.innerHTML='';
+  chapters.forEach((ch,idx)=>{
+    const btn=document.createElement('button');
+    btn.innerText=`Chapter ${idx+1}`;
+    btn.onclick=()=>goToChapter(idx);
+    menu.appendChild(btn);
+  });
+  menu.style.display = menu.style.display==='none' ? 'flex' : 'none';
+}
+
+function goToStart(){
+  goToChapter(0);
+}
+
+// Initial load
+goToStart();
+
+// Swipe support
 let touchStartX=0;
-bookContainer.addEventListener('touchstart', e=>{touchStartX=e.changedTouches[0].screenX;});
-bookContainer.addEventListener('touchend', e=>{
+const container=document.querySelector('.book-container');
+container.addEventListener('touchstart', e=>{touchStartX=e.changedTouches[0].screenX;});
+container.addEventListener('touchend', e=>{
   const touchEndX = e.changedTouches[0].screenX;
-  if(touchStartX-touchEndX>50){
-    if(currentPageIndex<pages.length-1) currentPageIndex++;
-  } else if(touchEndX-touchStartX>50){
-    if(currentPageIndex>0) currentPageIndex--;
+  if(touchStartX - touchEndX > 50){
+    if(currentPage<pages.length-1) currentPage++;
+  } else if(touchEndX - touchStartX > 50){
+    if(currentPage>0) currentPage--;
   }
   renderPage();
 });
-
-renderChaptersList();
-if(chapters.length>0) openChapter(0);
 </script>
 
 </body>

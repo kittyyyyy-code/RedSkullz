@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Book Maker</title>
+<title>Library Kitty</title>
 <style>
   body {
     margin:0;
@@ -80,15 +80,18 @@
     background:#eee;
     cursor:pointer;
   }
+  h2 {margin-top:0;}
 </style>
 </head>
 <body>
-<header>📚 Red Skullz Book Maker</header>
-<div class="container">
-  <h2>Create Your Book</h2>
+<header>📚 Library Kitty</header>
+
+<div class="container" id="newBookContainer">
+  <h2>Create a Book or Draft</h2>
   <input type="text" id="bookTitle" placeholder="Book Title">
   <input type="file" id="bookCover">
   <button onclick="startBook()">Make Book</button>
+  <button onclick="startDraft()">Save as Draft</button>
 </div>
 
 <div class="container" id="bookEditorContainer" style="display:none;">
@@ -98,6 +101,7 @@
   <button onclick="finishChapter()">Finish Chapter</button>
   <div id="chaptersContainer"></div>
   <button onclick="finishBook()">Finish Book</button>
+  <button onclick="saveDraft()">Save Draft</button>
 </div>
 
 <div class="container">
@@ -105,17 +109,34 @@
   <div id="booksLibrary" class="books-list"></div>
 </div>
 
-<script>
-let currentBook = { title: '', cover: '', chapters: [] };
-let books = JSON.parse(localStorage.getItem('booksLibrary')) || [];
+<div class="container">
+  <h2>Drafts</h2>
+  <div id="draftsLibrary" class="books-list"></div>
+</div>
 
-function startBook() {
+<script>
+let currentBook = { title:'', cover:'', chapters:[], isDraft:false };
+let books = JSON.parse(localStorage.getItem('booksLibrary')) || [];
+let drafts = JSON.parse(localStorage.getItem('draftsLibrary')) || [];
+
+// Start new book
+function startBook(){
+  startBookInternal(false);
+}
+
+// Start new draft
+function startDraft(){
+  startBookInternal(true);
+}
+
+function startBookInternal(asDraft){
   const title = document.getElementById('bookTitle').value.trim();
   const coverInput = document.getElementById('bookCover');
-  if(!title) { alert("Please enter a title!"); return; }
-  currentBook.title = title;
+  if(!title){ alert("Please enter a title!"); return; }
+  
+  currentBook = { title, cover:'', chapters:[], isDraft: asDraft };
 
-  if(coverInput.files.length > 0){
+  if(coverInput.files.length>0){
     const reader = new FileReader();
     reader.onload = function(e){
       currentBook.cover = e.target.result;
@@ -123,66 +144,119 @@ function startBook() {
     }
     reader.readAsDataURL(coverInput.files[0]);
   } else {
-    currentBook.cover = '';
     showBookEditor();
   }
 }
 
-function showBookEditor() {
-  document.getElementById('bookEditorContainer').style.display = 'block';
-  document.getElementById('currentBookTitle').innerText = currentBook.title;
+function showBookEditor(){
+  document.getElementById('bookEditorContainer').style.display='block';
+  document.getElementById('currentBookTitle').innerText=currentBook.title;
+  renderChapters();
 }
 
-function finishChapter() {
-  const content = document.getElementById('chapterContent').value.trim();
+// Finish chapter
+function finishChapter(){
+  const content=document.getElementById('chapterContent').value.trim();
   if(!content){ alert("Write something first!"); return; }
   currentBook.chapters.push(content);
-  
-  const chapterDiv = document.createElement('div');
-  chapterDiv.className = 'chapter';
-  chapterDiv.innerHTML = `<strong>Chapter ${currentBook.chapters.length}:</strong><br>${content.replace(/\n/g,'<br>')}`;
-  document.getElementById('chaptersContainer').appendChild(chapterDiv);
-
-  document.getElementById('chapterContent').value = '';
+  document.getElementById('chapterContent').value='';
+  renderChapters();
 }
 
-function finishBook() {
-  books.push({...currentBook});
-  localStorage.setItem('booksLibrary', JSON.stringify(books));
-  alert("Book finished and saved!");
-  
-  // Reset editor
-  currentBook = { title: '', cover: '', chapters: [] };
-  document.getElementById('bookEditorContainer').style.display = 'none';
-  document.getElementById('chaptersContainer').innerHTML = '';
-  document.getElementById('bookTitle').value = '';
-  document.getElementById('bookCover').value = '';
-  renderLibrary();
-}
-
-function renderLibrary() {
-  const library = document.getElementById('booksLibrary');
-  library.innerHTML = '';
-  books.forEach((book, idx)=>{
-    const bookDiv = document.createElement('div');
-    bookDiv.className = 'book-entry';
-    bookDiv.innerHTML = `<strong>${book.title}</strong><br>${book.cover ? `<img src="${book.cover}" class="book-cover">` : ''}<br>Chapters: ${book.chapters.length}`;
-    bookDiv.onclick = ()=>viewBook(idx);
-    library.appendChild(bookDiv);
+function renderChapters(){
+  const container=document.getElementById('chaptersContainer');
+  container.innerHTML='';
+  currentBook.chapters.forEach((c,i)=>{
+    const div=document.createElement('div');
+    div.className='chapter';
+    div.innerHTML=`<strong>Chapter ${i+1}:</strong><br>${c.replace(/\n/g,'<br>')}`;
+    container.appendChild(div);
   });
 }
 
-function viewBook(idx) {
-  const book = books[idx];
-  const viewWindow = window.open('', '_blank');
-  viewWindow.document.write(`<html><head><title>${book.title}</title></head><body style="font-family:Arial,sans-serif; padding:20px;">
+// Finish Book
+function finishBook(){
+  if(currentBook.chapters.length===0){ alert("Add at least one chapter!"); return; }
+  books.push({...currentBook, isDraft:false});
+  localStorage.setItem('booksLibrary', JSON.stringify(books));
+  removeDraftIfExists();
+  alert("Book finished and saved!");
+  resetEditor();
+  renderLibrary();
+}
+
+// Save Draft
+function saveDraft(){
+  currentBook.isDraft=true;
+  drafts.push({...currentBook});
+  localStorage.setItem('draftsLibrary', JSON.stringify(drafts));
+  alert("Draft saved!");
+  resetEditor();
+  renderDrafts();
+}
+
+// Remove draft if finished as book
+function removeDraftIfExists(){
+  drafts = drafts.filter(d => d.title !== currentBook.title);
+  localStorage.setItem('draftsLibrary', JSON.stringify(drafts));
+}
+
+// Reset editor
+function resetEditor(){
+  currentBook={ title:'', cover:'', chapters:[], isDraft:false };
+  document.getElementById('bookEditorContainer').style.display='none';
+  document.getElementById('chaptersContainer').innerHTML='';
+  document.getElementById('bookTitle').value='';
+  document.getElementById('bookCover').value='';
+  document.getElementById('chapterContent').value='';
+}
+
+// Render libraries
+function renderLibrary(){
+  const library=document.getElementById('booksLibrary');
+  library.innerHTML='';
+  books.forEach((book,idx)=>{
+    const div=document.createElement('div');
+    div.className='book-entry';
+    div.innerHTML=`<strong>${book.title}</strong><br>${book.cover ? `<img src="${book.cover}" class="book-cover">` : ''}<br>Chapters: ${book.chapters.length}`;
+    div.onclick=()=>viewBook(book);
+    library.appendChild(div);
+  });
+}
+
+function renderDrafts(){
+  const draftLib=document.getElementById('draftsLibrary');
+  draftLib.innerHTML='';
+  drafts.forEach((draft,idx)=>{
+    const div=document.createElement('div');
+    div.className='book-entry';
+    div.innerHTML=`<strong>${draft.title}</strong><br>${draft.cover ? `<img src="${draft.cover}" class="book-cover">` : ''}<br>Chapters: ${draft.chapters.length}`;
+    div.onclick=()=>editDraft(idx);
+    draftLib.appendChild(div);
+  });
+}
+
+// View book (cannot edit)
+function viewBook(book){
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><title>${book.title}</title></head><body style="font-family:Arial,sans-serif; padding:20px;">
   <h1>${book.title}</h1>
-  ${book.cover ? `<img src="${book.cover}" style="width:200px; height:300px; object-fit:cover;">` : ''}
+  ${book.cover ? `<img src="${book.cover}" style="width:200px;height:300px;object-fit:cover;">` : ''}
   ${book.chapters.map((c,i)=>`<h3>Chapter ${i+1}</h3><p>${c.replace(/\n/g,'<br>')}</p>`).join('')}
   </body></html>`);
 }
 
+// Edit draft
+function editDraft(idx){
+  currentBook = drafts[idx];
+  drafts.splice(idx,1); // remove it so we can overwrite later
+  localStorage.setItem('draftsLibrary', JSON.stringify(drafts));
+  showBookEditor();
+}
+
+// Initialize
 renderLibrary();
+renderDrafts();
 </script>
 </body>
 </html>

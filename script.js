@@ -1,89 +1,171 @@
-// Firebase setup (temporary demo version)
-const firebaseConfig = {
-  apiKey: "AIzaSyDUMMY",
-  authDomain: "example.firebaseapp.com",
-  databaseURL: "https://example.firebaseio.com",
-  projectId: "example",
-  storageBucket: "example.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:example"
-};
-firebase.initializeApp(firebaseConfig);
-
+// Firebase setup
 const db = firebase.database();
-let currentUser = "";
+const storage = firebase.storage();
 
-// Login with name check
+let currentUser = null;
+const maxImages = 10;
+
+// DOM elements
+const loginScreen = document.getElementById('login-screen');
+const chatScreen = document.getElementById('chat-screen');
+const usernameInput = document.getElementById('username');
+const nameError = document.getElementById('name-error');
+const chatBox = document.getElementById('chatBox');
+const msgInput = document.getElementById('msg');
+const imgInput = document.getElementById('imgInput');
+const dingSound = document.getElementById('ding');
+
+const ocSection = document.getElementById('oc-section');
+const ocName = document.getElementById('ocName');
+const ocDesc = document.getElementById('ocDesc');
+const ocImage = document.getElementById('ocImage');
+const ocMsg = document.getElementById('ocMsg');
+const ocPopup = document.getElementById('oc-popup');
+const ocPopupContent = document.getElementById('oc-popup-content');
+
+// ---- LOGIN ----
 function login() {
-  const name = document.getElementById("username").value.trim();
-  const error = document.getElementById("name-error");
-
-  if (!name) {
-    error.textContent = "Please enter a name!";
+  const name = usernameInput.value.trim();
+  if (name === "") {
+    nameError.textContent = "Please enter a name.";
     return;
   }
 
-  // Check if name is taken
-  db.ref("users/" + name).once("value", snap => {
-    if (snap.exists()) {
-      error.textContent = "That name is already taken!";
+  db.ref('users').once('value', snapshot => {
+    let exists = false;
+    snapshot.forEach(child => {
+      if (child.val().name.toLowerCase() === name.toLowerCase()) {
+        exists = true;
+      }
+    });
+
+    if (exists) {
+      nameError.textContent = "That name is already taken!";
     } else {
-      db.ref("users/" + name).set(true);
       currentUser = name;
-      document.getElementById("login-screen").style.display = "none";
-      document.getElementById("chat-screen").style.display = "block";
-      listenForMessages();
+      db.ref('users').push({ name: currentUser });
+      loginScreen.style.display = 'none';
+      chatScreen.style.display = 'block';
+      ocSection.style.display = 'block';
+      loadMessages();
     }
   });
 }
 
-// Send a message
+// ---- SEND MESSAGE ----
 function sendMessage() {
-  const msgInput = document.getElementById("msg");
-  const imgInput = document.getElementById("imgInput");
-  const msg = msgInput.value.trim();
-  const files = Array.from(imgInput.files);
+  if (!currentUser) return alert("Please enter a name first!");
+  const text = msgInput.value.trim();
+  const files = imgInput.files;
 
-  if (!msg && files.length === 0) return;
-  if (files.length > 10) return alert("You can only send up to 10 images!");
+  if (text === "" && files.length === 0) return;
 
-  const data = { user: currentUser, text: msg, time: Date.now() };
-  db.ref("messages").push(data);
+  const messageData = {
+    name: currentUser,
+    text: text,
+    time: Date.now(),
+    images: []
+  };
 
-  files.forEach(f => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const imgData = { user: currentUser, image: e.target.result, time: Date.now() };
-      db.ref("messages").push(imgData);
-    };
-    reader.readAsDataURL(f);
-  });
+  if (files.length > 0) {
+    if (files.length > maxImages) {
+      alert(`You can only send up to ${maxImages} images!`);
+      return;
+    }
 
-  msgInput.value = "";
-  imgInput.value = "";
+    let uploadPromises = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileRef = storage.ref(`images/${Date.now()}_${file.name}`);
+      const uploadTask = fileRef.put(file).then(snapshot => snapshot.ref.getDownloadURL());
+      uploadPromises.push(uploadTask);
+    }
+
+    Promise.all(uploadPromises).then(urls => {
+      messageData.images = urls;
+      db.ref('messages').push(messageData);
+      msgInput.value = "";
+      imgInput.value = "";
+    });
+  } else {
+    db.ref('messages').push(messageData);
+    msgInput.value = "";
+  }
 }
 
-// Listen for new messages
-function listenForMessages() {
-  const chat = document.getElementById("chatBox");
-  const ding = document.getElementById("ding");
-
-  db.ref("messages").on("child_added", snap => {
-    const data = snap.val();
-    const div = document.createElement("div");
-    div.className = "message";
-
-    if (data.text) div.innerHTML = `<strong>${data.user}:</strong> ${data.text}`;
-    else if (data.image) div.innerHTML = `<strong>${data.user}:</strong><br><img src="${data.image}" style="max-width:100%;border-radius:6px;margin-top:5px;">`;
-
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-
-    if (data.user !== currentUser) ding.play();
+// ---- LOAD MESSAGES ----
+function loadMessages() {
+  db.ref('messages').on('child_added', snapshot => {
+    const msg = snapshot.val();
+    displayMessage(msg);
   });
 }
 
-// Simple WebRTC voice call placeholder (real one comes next)
+function displayMessage(msg) {
+  const msgDiv = document.createElement('div');
+  msgDiv.classList.add('message');
+
+  let html = `<strong class="clickable-name" data-user="${msg.name}" style="color:#ff5555;cursor:pointer;">${msg.name}</strong>: ${msg.text || ''}<br>`;
+
+  if (msg.images && msg.images.length > 0) {
+    msg.images.forEach(url => {
+      html += `<img src="${url}" style="max-width:150px; margin:5px;">`;
+    });
+  }
+
+  msgDiv.innerHTML = html;
+  chatBox.appendChild(msgDiv);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  if (msg.name !== currentUser) {
+    dingSound.play();
+  }
+
+  msgDiv.querySelector('.clickable-name').addEventListener('click', e => {
+    const user = e.target.getAttribute('data-user');
+    showOC(user);
+  });
+}
+
+// ---- OC SYSTEM ----
+function saveOC() {
+  if (!currentUser) return alert("Please log in first!");
+  const name = ocName.value.trim();
+  const desc = ocDesc.value.trim();
+  const imageFile = ocImage.files[0];
+
+  if (name === "" || desc === "") {}
+}
+
+function saveOCData(name, desc, imgUrl) {
+  db.ref(`ocs/${currentUser}`).set({
+    name: name,
+    desc: desc,
+    image: imgUrl
+  }).then(() => {
+    ocMsg.textContent = "✅ OC saved!";
+  });
+}
+
+function showOC(user) {
+  db.ref(`ocs/${user}`).once('value', snapshot => {
+    const oc = snapshot.val();
+    if (!oc) {
+      ocPopupContent.innerHTML = `<p>${user} has not added an OC yet.</p>`;
+    } else {
+      let html = `<h3>${oc.name}</h3><p>${oc.desc}</p>`;
+      if (oc.image) html += `<img src="${oc.image}" style="max-width:200px; border-radius:10px;">`;
+      ocPopupContent.innerHTML = html;
+    }
+    ocPopup.style.display = 'block';
+  });
+}
+
+function closeOCPopup() {
+  ocPopup.style.display = 'none';
+}
+
+// ---- CALL PLACEHOLDER ----
 function startCall() {
-  alert("Voice calling will be added next!");
+  alert("Voice call feature coming soon!");
 }

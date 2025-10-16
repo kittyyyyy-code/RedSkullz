@@ -30,28 +30,27 @@
   </div>
 
   <audio id="ding" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
-  
+
+  <!-- ✅ Firebase (Compat version that works directly in browser) -->
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
-  <script src="script.js"></script> <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage-compat.js"></script>
 
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyCu6EYH9SZOY3tMM2FN0lC0QS-ertH2_R8",
-    authDomain: "redskullzchat.firebaseapp.com",
-    projectId: "redskullzchat",
-    storageBucket: "redskullzchat.firebasestorage.app",
-    messagingSenderId: "342204405491",
-    appId: "1:342204405491:web:453aa4e1b7c8f95fee8986"
-  };
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCu6EYH9SZOY3tMM2FN0lC0QS-ertH2_R8",
+      authDomain: "redskullzchat.firebaseapp.com",
+      projectId: "redskullzchat",
+      storageBucket: "redskullzchat.firebasestorage.app",
+      messagingSenderId: "342204405491",
+      appId: "1:342204405491:web:453aa4e1b7c8f95fee8986",
+      databaseURL: "https://redskullzchat-default-rtdb.firebaseio.com/"
+    };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script>
+    firebase.initializeApp(firebaseConfig);
+  </script>
+
+  <!-- Your main JavaScript -->
+  <script src="script.js"></script>
 </body>
 </html>
-

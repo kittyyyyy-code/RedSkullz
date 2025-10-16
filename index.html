@@ -4,34 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RedSkullz Chat</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body style="background:#111; color:white; font-family:sans-serif;">
+
+  <!-- LOGIN -->
   <div id="login-screen">
     <h2>Enter your name</h2>
     <input type="text" id="username" placeholder="Your name..." />
     <button onclick="login()">Join Chat</button>
-    <p id="name-error"></p>
+    <p id="name-error" style="color:red;"></p>
   </div>
 
+  <!-- CHAT -->
   <div id="chat-screen" style="display:none;">
-    <header>
-      <h2>RedSkullz Private Chat 💬</h2>
+    <header style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>💬 RedSkullz Chat</h2>
       <button id="callBtn" onclick="startCall()">📞 Call</button>
     </header>
 
-    <div id="chatBox"></div>
+    <div id="chatBox" style="border:1px solid #444; padding:10px; height:300px; overflow-y:scroll; background:#222;"></div>
 
-    <div id="inputArea">
-      <input id="msg" placeholder="Type a message..." />
+    <div id="inputArea" style="margin-top:10px;">
+      <input id="msg" placeholder="Type a message..." style="padding:5px;width:60%;" />
       <input type="file" id="imgInput" accept="image/*" multiple />
       <button onclick="sendMessage()">Send</button>
     </div>
+
+    <div id="oc-section" style="display:none; margin-top:20px;">
+      <h3>Your OC Profile 🎭</h3>
+      <input id="ocName" placeholder="OC Name" /><br><br>
+      <textarea id="ocDesc" placeholder="OC Description" rows="4" cols="40"></textarea><br><br>
+      <input type="file" id="ocImage" accept="image/*" /><br><br>
+      <button onclick="saveOC()">Save OC Profile</button>
+      <p id="ocMsg"></p>
+    </div>
+  </div>
+
+  <!-- OC POPUP -->
+  <div id="oc-popup" style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%); background:#222; color:white; padding:20px; border-radius:10px; z-index:1000;">
+    <button onclick="closeOCPopup()" style="float:right;">X</button>
+    <div id="oc-popup-content"></div>
   </div>
 
   <audio id="ding" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
-  <!-- ✅ Firebase (Compat version that works directly in browser) -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage-compat.js"></script>
@@ -46,11 +64,9 @@
       appId: "1:342204405491:web:453aa4e1b7c8f95fee8986",
       databaseURL: "https://redskullzchat-default-rtdb.firebaseio.com/"
     };
-
     firebase.initializeApp(firebaseConfig);
   </script>
 
-  <!-- Your main JavaScript -->
   <script src="script.js"></script>
 </body>
 </html>

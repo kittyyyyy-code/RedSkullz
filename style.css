@@ -1,56 +1,48 @@
 body {
-  background-color: #121212;
+  font-family: 'Arial';
+  background-color: #101820;
   color: white;
-  font-family: "Poppins", sans-serif;
+  margin: 0;
+  padding: 0;
   text-align: center;
 }
 
+#login, #chat, #ocPanel {
+  padding: 20px;
+}
+
 #chatBox {
+  background: #181a1f;
   height: 400px;
-  width: 90%;
-  margin: 20px auto;
-  border: 2px solid #333;
-  border-radius: 10px;
-  background-color: #1e1e1e;
   overflow-y: scroll;
+  border-radius: 10px;
   padding: 10px;
-  text-align: left;
+  margin-bottom: 10px;
 }
 
 .message {
-  margin: 10px 0;
+  background: #282c34;
+  margin: 5px;
   padding: 8px;
-  border-radius: 6px;
-  background-color: #292929;
-}
-
-.username {
-  font-weight: bold;
-  color: #00e0ff;
+  border-radius: 5px;
+  text-align: left;
 }
 
 img.chat-img {
-  width: 120px;
-  margin: 5px;
-  border-radius: 10px;
+  max-width: 150px;
+  border-radius: 8px;
+  margin-top: 5px;
 }
 
-#inputArea {
-  margin-top: 10px;
+button {
+  background-color: #e63946;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 5px;
+  cursor: pointer;
 }
 
-.modal {
-  display: none;
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-}
-
-.modal-content {
-  background-color: #222;
-  margin: 10% auto;
-  padding: 20px;
-  width: 80%;
-  border-radius: 10px;
+button:hover {
+  background-color: #d62828;
 }

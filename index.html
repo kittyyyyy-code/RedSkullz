@@ -1,15 +1,66 @@
-// firebase.js
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confess & Guess: Chaos Edition 💋</title>
+  <script type="module">
+    // Import Firebase libraries
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "hexagon.firebaseapp.com",
-  projectId: "hexagon",
-  storageBucket: "hexagon.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_ID",
-  appId: "YOUR_APP_ID"
-};
+    // Your Firebase config (paste yours here)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDGBEyrBiqsMFmSG1zzS2LWubip4Or6q9g",
+      authDomain: "confession-8df39.firebaseapp.com",
+      databaseURL: "https://confession-8df39-default-rtdb.firebaseio.com",
+      projectId: "confession-8df39",
+      storageBucket: "confession-8df39.firebasestorage.app",
+      messagingSenderId: "363784488567",
+      appId: "1:363784488567:web:9bbf7c98f8a89ef17de872"
+    };
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // --- Basic Example: Send a confession ---
+    window.submitConfession = async function () {
+      const confession = document.getElementById("confession").value.trim();
+      if (!confession) return alert("Type your confession first 😈");
+
+      const confRef = ref(db, "confessions");
+      await push(confRef, {
+        text: confession,
+        timestamp: Date.now()
+      });
+
+      document.getElementById("confession").value = "";
+      alert("Confession submitted anonymously 💋");
+    };
+
+    // --- Read all confessions ---
+    const list = document.getElementById("list");
+    const confRef = ref(db, "confessions");
+    onValue(confRef, (snapshot) => {
+      const data = snapshot.val();
+      list.innerHTML = "";
+      for (let id in data) {
+        const li = document.createElement("li");
+        li.textContent = data[id].text;
+        list.appendChild(li);
+      }
+    });
+  </script>
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:20px;">
+  <h1>💋 Confess & Guess: Chaos Edition 💋</h1>
+  <p>Type your anonymous confession below and submit:</p>
+
+  <textarea id="confession" rows="3" cols="40" placeholder="Enter your spicy secret..."></textarea><br/>
+  <button onclick="submitConfession()">Submit Confession</button>
+
+  <h2>🔥 Current Confessions 🔥</h2>
+  <ul id="list"></ul>
+</body>
+</html>

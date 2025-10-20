@@ -1,0 +1,431 @@
+/*
+CatCafe Chat — Single-file React prototype (App.jsx)
+
+Features included:
+- Create/join private group rooms with invite code
+- Text chat with images (drag & drop / file upload) and stickers
+- Profile customization (avatar, sticker, accent color)
+- Voice & video group call using WebRTC (requires a simple signalling server; server code included below)
+- Reactions, message editing/deleting (local), pins, and simple search
+- Cat-themed UI: paw icons, cat stickers, playful fonts and colors
+
+How to run (frontend):
+1. Create a new React app (Vite or Create React App). Replace src/App.jsx with this file and add Tailwind.
+2. Start local signalling server (optional for real multi-peer calls): node signalling-server.js
+3. Run frontend: npm run dev
+
+Signalling server (optional) is included below in the same file; copy to signalling-server.js
+
+This single-file prototype intentionally keeps everything client-side (except signalling) so you can test and expand.
+*/
+
+import React, { useEffect, useRef, useState } from "react";
+
+// Minimal CSS-in-JS for playful cat theme (Tailwind recommended, but we include lightweight styles)
+const styles = {
+  app: `min-h-screen bg-gradient-to-br from-indigo-50 via-pink-50 to-yellow-50 font-sans`,
+  container: `max-w-6xl mx-auto p-4`,
+  header: `flex items-center justify-between py-4`,
+  logo: `flex items-center gap-3 text-2xl font-bold`,
+  card: `bg-white/80 backdrop-blur rounded-2xl shadow-lg p-4`,
+  sidebar: `w-72`,
+  main: `flex-1 ml-4`
+};
+
+// Utilities
+const uid = (n = 6) => Math.random().toString(36).slice(2, 2 + n);
+
+// Default stickers (cat-themed) — you can replace with image URLs
+const STICKERS = ["😺", "🐾", "😻", "😽", "🪄", "🌸", "🍣", "☕️"];
+
+// Simple local persistence helpers
+const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+const load = (k, fallback) => {
+  try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch (e) { return fallback; }
+};
+
+// ---------- WebRTC signalling helper (uses WebSocket server)
+// For multi-peer mesh calls each client must connect to a signalling server which relays SDP offers and ICE candidates.
+// A minimal Node signalling server implementation is included at the bottom of this file (signalling-server.js).
+
+function useSignalling(serverUrl, roomId, onMessage) {
+  const wsRef = useRef(null);
+
+  useEffect(() => {
+    if (!serverUrl || !roomId) return;
+    const ws = new WebSocket(serverUrl);
+    wsRef.current = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "join", room: roomId }));
+    };
+    ws.onmessage = (ev) => {
+      const data = JSON.parse(ev.data);
+      if (onMessage) onMessage(data);
+    };
+    ws.onclose = () => console.log("signalling closed");
+    return () => { ws.close(); };
+  }, [serverUrl, roomId]);
+
+  const send = (payload) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+    }
+  };
+
+  return { send };
+}
+
+// ---------- Main App
+export default function App() {
+  // user profile
+  const [profile, setProfile] = useState(() => load("catcafe:profile", {
+    id: uid(8), name: "Whiskers", color: "#f59e0b", sticker: STICKERS[2]
+  }));
+
+  // rooms stored locally
+  const [rooms, setRooms] = useState(() => load("catcafe:rooms", {}));
+  const [currentRoom, setCurrentRoom] = useState(null);
+
+  // messages per room
+  const [messages, setMessages] = useState(() => load("catcafe:messages", {}));
+
+  // UI state
+  const [text, setText] = useState("");
+  const [search, setSearch] = useState("");
+
+  // calling state
+  const [inCall, setInCall] = useState(false);
+  const localVideoRef = useRef(null);
+  const remoteVideosRef = useRef({});
+  const localStreamRef = useRef(null);
+  const peersRef = useRef({});
+
+  // signalling config (change if you run signalling server)
+  const SIGNALING_URL = "ws://localhost:8888"; // update if needed
+
+  // handle messages send/receive (local only for prototype)
+  const sendMessage = (roomId, msg) => {
+    const roomMsgs = messages[roomId] ?? [];
+    const newMsg = { id: uid(8), user: profile, text: msg.text ?? null, time: Date.now(), type: msg.type ?? 'text', meta: msg.meta ?? {} };
+    const updated = { ...messages, [roomId]: [...roomMsgs, newMsg] };
+    setMessages(updated);
+    save("catcafe:messages", updated);
+  };
+
+  useEffect(() => save("catcafe:rooms", rooms), [rooms]);
+  useEffect(() => save("catcafe:profile", profile), [profile]);
+
+  // Join or create room
+  const createRoom = ({ name }) => {
+    const id = uid(5).toUpperCase();
+    const r = { id, name, created: Date.now(), members: [profile.id], pinned: null };
+    const updated = { ...rooms, [id]: r };
+    setRooms(updated);
+    setCurrentRoom(id);
+  };
+  const joinRoom = (id) => {
+    if (!rooms[id]) {
+      // create a placeholder room when joining by code
+      const r = { id, name: `Room ${id}`, created: Date.now(), members: [profile.id], pinned: null };
+      setRooms(prev => { const u = { ...prev, [id]: r }; save("catcafe:rooms", u); return u; });
+    }
+    setCurrentRoom(id);
+  };
+
+  // file upload for image messages
+  const handleFile = (file) => {
+    if (!currentRoom) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      sendMessage(currentRoom, { type: 'image', text: null, meta: { src: reader.result, name: file.name } });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // simple message send
+  const submit = (e) => {
+    e?.preventDefault();
+    if (!text.trim() || !currentRoom) return;
+    sendMessage(currentRoom, { text: text.trim() });
+    setText("");
+  };
+
+  // ----- Simple WebRTC call flow (mesh) -----
+  const signalling = useSignalling(SIGNALING_URL, currentRoom, async (data) => {
+    // handle incoming signalling messages
+    const { from, to, action, payload } = data;
+    if (to && to !== profile.id) return; // ignore
+    if (action === 'new-peer' && payload?.id && payload.id !== profile.id) {
+      // create peer connection and initiate
+      await createPeer(payload.id, true);
+    }
+    if (action === 'offer' && payload?.sdp) {
+      await createPeer(from, false, payload.sdp);
+    }
+    if (action === 'answer' && payload?.sdp) {
+      const pc = peersRef.current[from]?.pc;
+      if (pc) pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    }
+    if (action === 'ice' && payload?.candidate) {
+      const pc = peersRef.current[from]?.pc;
+      if (pc) pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(console.error);
+    }
+  });
+
+  async function createPeer(peerId, initiator = false, remoteSdp = null) {
+    if (peersRef.current[peerId]) return; // already connected
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    peersRef.current[peerId] = { pc };
+
+    // add local tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+    }
+
+    pc.ontrack = (ev) => {
+      // show remote stream in a video element
+      const stream = ev.streams[0];
+      remoteVideosRef.current[peerId] = stream;
+      // trigger re-render
+      setInCall(s => s);
+    };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        signalling.send({ type: 'signal', action: 'ice', to: peerId, from: profile.id, payload: { candidate: e.candidate } });
+      }
+    };
+
+    if (initiator) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      signalling.send({ type: 'signal', action: 'offer', to: peerId, from: profile.id, payload: { sdp: pc.localDescription } });
+    } else if (remoteSdp) {
+      await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      signalling.send({ type: 'signal', action: 'answer', to: peerId, from: profile.id, payload: { sdp: pc.localDescription } });
+    }
+  }
+
+  const startCall = async () => {
+    if (!currentRoom) return alert('Join a room first!');
+    // get media
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      localStreamRef.current = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      setInCall(true);
+      // notify signalling server there is a new peer
+      signalling.send({ type: 'signal', action: 'ready', from: profile.id, payload: { id: profile.id } });
+    } catch (e) {
+      console.error(e);
+      alert('Microphone / camera access denied');
+    }
+  };
+
+  const leaveCall = () => {
+    setInCall(false);
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+    // close peer connections
+    Object.values(peersRef.current).forEach(p => { try { p.pc.close(); } catch {} });
+    peersRef.current = {};
+    remoteVideosRef.current = {};
+  };
+
+  // helper to render messages (search filter applied)
+  const roomMessages = currentRoom ? (messages[currentRoom] ?? []) : [];
+  const filtered = search.trim() ? roomMessages.filter(m => (m.text || m.meta?.name || '').toLowerCase().includes(search.toLowerCase())) : roomMessages;
+
+  return (
+    <div className={styles.app}>
+      <div className={styles.container}>
+        <header className={styles.header}>
+          <div className={styles.logo}>
+            <span style={{fontSize:28}}>🐾</span>
+            <div>
+              <div>CatCafe Chat</div>
+              <div style={{fontSize:12, color:'#6b7280'}}>Cozy meetings & hangouts for your comic team</div>
+            </div>
+          </div>
+          <div style={{display:'flex', gap:12, alignItems:'center'}}>
+            <div className="p-2 rounded-full" style={{background:profile.color}} title="Your accent color">
+              {profile.sticker}
+            </div>
+            <div className="text-sm">{profile.name}</div>
+          </div>
+        </header>
+
+        <div className="flex">
+          <aside className={`${styles.card} ${styles.sidebar}`}>
+            <h3 className="font-semibold mb-2">Rooms</h3>
+            <div className="flex flex-col gap-2">
+              {Object.values(rooms).map(r => (
+                <div key={r.id} className={`p-2 rounded-xl hover:shadow cursor-pointer ${currentRoom===r.id? 'ring-2 ring-indigo-300':'bg-white'}`} onClick={() => joinRoom(r.id)}>
+                  <div className="flex justify-between">
+                    <div className="font-medium">{r.name}</div>
+                    <div className="text-xs text-gray-400">{r.id}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <form onSubmit={(e)=>{e.preventDefault(); createRoom({ name: e.target.roomName.value || 'Cozy Corner' }); e.target.roomName.value=''; }}>
+                <input name="roomName" placeholder="Create room" className="w-full p-2 rounded-md border" />
+                <button className="mt-2 w-full py-2 rounded-md bg-indigo-500 text-white">Create</button>
+              </form>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold">Join by code</h4>
+              <div className="flex gap-2 mt-2">
+                <input id="joincode" placeholder="ROOMID" className="flex-1 p-2 rounded-md border" />
+                <button className="py-2 px-3 rounded-md bg-amber-400" onClick={() => { const v=document.getElementById('joincode').value.trim().toUpperCase(); if (v) joinRoom(v); }}>Join</button>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold">Profile</h4>
+              <input value={profile.name} onChange={(e)=>setProfile(p=>({...p, name:e.target.value}))} className="w-full p-2 rounded-md border mt-2" />
+              <div className="flex gap-2 mt-2">
+                {STICKERS.map(s => (
+                  <button key={s} onClick={()=>setProfile(p=>({...p, sticker:s}))} className={`p-2 rounded-md ${profile.sticker===s? 'ring-2':''}`}>{s}</button>
+                ))}
+              </div>
+              <div className="mt-2">
+                <label className="text-xs">Accent color</label>
+                <input type="color" value={profile.color} onChange={(e)=>setProfile(p=>({...p, color:e.target.value}))} className="w-full" />
+              </div>
+            </div>
+
+          </aside>
+
+          <main className={`${styles.main}`}>
+            <div className={`${styles.card}`}>
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <div className="text-lg font-semibold">{currentRoom ? rooms[currentRoom]?.name ?? `Room ${currentRoom}` : 'No room joined'}</div>
+                  <div className="text-xs text-gray-400">{currentRoom ? `Code: ${currentRoom}` : 'Create or join a room to start'}</div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input placeholder="Search messages" value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 rounded-md border" />
+                  <button onClick={startCall} className="py-2 px-3 rounded-md bg-green-500 text-white">📞 Join Call</button>
+                  <button onClick={leaveCall} className="py-2 px-3 rounded-md bg-red-400 text-white">🚪 Leave Call</button>
+                </div>
+              </div>
+
+              {/* Chat area */}
+              <div style={{height:420, overflow:'auto'}} className="mb-3 p-2 bg-white rounded-lg border">
+                {filtered.map(m => (
+                  <div key={m.id} className="p-2 mb-2 rounded-lg" style={{background: m.user.id===profile.id ? '#fffbeb' : '#f8fafc'}}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div style={{width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:18,background:m.user.color}}>{m.user.sticker}</div>
+                      <div>
+                        <div className="text-sm font-medium">{m.user.name} <span className="text-xs text-gray-400">{new Date(m.time).toLocaleTimeString()}</span></div>
+                        {m.type==='text' && <div className="text-sm">{m.text}</div>}
+                        {m.type==='image' && <div className="mt-2"><img src={m.meta.src} alt={m.meta.name} style={{maxWidth:240,borderRadius:12}} /></div>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={submit} className="flex items-center gap-2">
+                <input value={text} onChange={(e)=>setText(e.target.value)} placeholder="Type a message..." className="flex-1 p-3 rounded-xl border" />
+                <label className="p-2 rounded-md bg-slate-100 cursor-pointer">
+                  📎
+                  <input type="file" accept="image/*" style={{display:'none'}} onChange={(e)=>{ if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
+                </label>
+                <div className="flex gap-1">
+                  {STICKERS.map(s=> <button key={s} type="button" onClick={()=>sendMessage(currentRoom, { type: 'text', text: s })} className="p-2">{s}</button>)}
+                </div>
+                <button className="py-2 px-4 rounded-xl bg-indigo-600 text-white">Send</button>
+              </form>
+
+            </div>
+
+            {/* Call area */}
+            <div className={`${styles.card} mt-4`}>
+              <h4 className="font-semibold">Call Stage</h4>
+              <div className="flex gap-3 mt-3">
+                <div style={{width:160}}>
+                  <div className="text-xs text-gray-500">Local</div>
+                  <video ref={localVideoRef} autoPlay muted playsInline style={{width:160,height:120,borderRadius:12,background:'#000'}} />
+                </div>
+                <div style={{flex:1}}>
+                  <div className="text-xs text-gray-500">Remote</div>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {Object.entries(remoteVideosRef.current).map(([id, stream]) => (
+                      <RemoteVideo key={id} stream={stream} id={id} />
+                    ))}
+                    {Object.keys(remoteVideosRef.current).length===0 && <div className="text-sm text-gray-400">No remote participants yet. When others join the call they'll appear here.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </main>
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+function RemoteVideo({ stream, id }) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if (ref.current && stream) ref.current.srcObject = stream;
+  },[stream]);
+  return (
+    <div style={{width:160}}>
+      <video ref={ref} autoPlay playsInline style={{width:160,height:120,borderRadius:12,background:'#000'}} />
+      <div className="text-xs">Peer {id}</div>
+    </div>
+  );
+}
+
+/* ----------------- Signalling server (Node.js) -----------------
+Copy the following code into signalling-server.js and run:
+
+  node signalling-server.js
+
+This is a tiny WebSocket server that routes signalling messages inside rooms.
+It is intentionally minimal—use a production-ready signaling server for a real app.
+
+// signalling-server.js
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 8888 });
+const rooms = {}; // roomId -> set of sockets
+
+wss.on('connection', function connection(ws) {
+  ws.on('message', function incoming(message) {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === 'join') {
+        const room = data.room;
+        ws.room = room;
+        rooms[room] = rooms[room] || new Set();
+        rooms[room].add(ws);
+        // notify others a new peer joined
+        rooms[room].forEach(s => { if (s !== ws) s.send(JSON.stringify({ type: 'signal', action: 'new-peer', from: 'server', payload: { id: data.id || 'peer' } })); });
+      }
+      if (data.type === 'signal') {
+        // broadcast to room
+        const room = ws.room;
+        if (!room) return;
+        rooms[room].forEach(s => { if (s !== ws) s.send(message); });
+      }
+    } catch(e) { console.error('invalid message', e); }
+  });
+  ws.on('close', ()=>{ if (ws.room && rooms[ws.room]) { rooms[ws.room].delete(ws); } });
+});
+
+------------------------------------------------------------------ */

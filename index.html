@@ -1,66 +1,432 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confess & Guess: Chaos Edition 💋</title>
-  <script type="module">
-    // Import Firebase libraries
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+/*
+RoleplayChatApp.jsx
+Single-file React + Tailwind demo app for a roleplay-friendly chat with:
+- public & private group chats
+- create/join groups, member-only access
+- sending text, images, and voice messages (recording as blobs)
+- simple per-user profiles (editable: avatar emoji, bio, stickers)
+- persistent login by tapping your profile (localStorage)
+- theme / color customization via CSS variables
+- protected profile view (others cannot open someone else's edit modal)
 
-    // Your Firebase config (paste yours here)
-    const firebaseConfig = {
-      apiKey: "AIzaSyDGBEyrBiqsMFmSG1zzS2LWubip4Or6q9g",
-      authDomain: "confession-8df39.firebaseapp.com",
-      databaseURL: "https://confession-8df39-default-rtdb.firebaseio.com",
-      projectId: "confession-8df39",
-      storageBucket: "confession-8df39.firebasestorage.app",
-      messagingSenderId: "363784488567",
-      appId: "1:363784488567:web:9bbf7c98f8a89ef17de872"
+This is a frontend-only demo. For production you'll want to add:
+- Backend realtime (Firebase Realtime DB / Firestore, or WebSocket server)
+- Secure storage for images/audio (e.g., Firebase Storage, S3)
+- Authentication (email, OAuth, or custom tokens)
+- Real-time voice calls via WebRTC with a signaling server
+- Proper access control on the server (prevent profile snooping, group membership enforcement)
+
+How to run (quick):
+1. Create a React app (Vite or CRA), install Tailwind.
+2. Add this file as src/RoleplayChatApp.jsx and use it in App.jsx: `import RoleplayChatApp from './RoleplayChatApp'` then render <RoleplayChatApp />
+3. `npm install` and `npm run dev` / `npm start`.
+
+Dependencies used: React, Tailwind CSS (for styling). No external libs required for the demo.
+
+Notes on integration:
+- To connect to a real backend: replace localStorage/state persistence with API calls to your server or Firebase.
+- For group voice calls: implement WebRTC signaling (via Socket.io or Firebase RT Database) and exchange SDP/ICE.
+
+*/
+
+import React, { useEffect, useRef, useState } from 'react';
+
+// Small utilities
+const uid = () => Math.random().toString(36).slice(2, 9);
+const now = () => new Date().toISOString();
+
+// Default demo sticker pack
+const DEFAULT_STICKERS = ['✨','🖤','🌙','🩶','🫧','🎭','🐾','🦋','🍃','🔥'];
+
+// CSS variables driven theme — we'll use inline styles for :root vars from state
+export default function RoleplayChatApp() {
+  // --- user & auth (localStorage "tap profile to return")
+  const [me, setMe] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('rp_me')) || null; } catch(e){ return null; }
+  });
+  const [usernameDraft, setUsernameDraft] = useState('');
+
+  // --- app state (in-memory demo) ---
+  const [groups, setGroups] = useState(() => {
+    // sample default group
+    const sample = [{
+      id: 'public-1',
+      name: 'Open Roleplay Square',
+      members: [],
+      isPrivate: false,
+      messages: [
+        { id: uid(), from: 'System', type: 'text', text: 'Welcome to Open Roleplay Square! Create a profile and join a private group to play.', t: now() }
+      ]
+    }];
+    try { return JSON.parse(localStorage.getItem('rp_groups')) || sample; } catch(e){ return sample }
+  });
+  const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id || null);
+
+  // --- UI state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(null); // local edit state
+  const [theme, setTheme] = useState(() => JSON.parse(localStorage.getItem('rp_theme')) || {primary:'#6b21a8', accent:'#06b6d4', bg:'#0f172a', text:'#e6eef8'});
+
+  // message composer
+  const [composer, setComposer] = useState('');
+  const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // voice recording
+  const [isRecording, setIsRecording] = useState(false);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  // helpers for persistence
+  useEffect(()=> localStorage.setItem('rp_groups', JSON.stringify(groups)), [groups]);
+  useEffect(()=> localStorage.setItem('rp_me', JSON.stringify(me)), [me]);
+  useEffect(()=> localStorage.setItem('rp_theme', JSON.stringify(theme)), [theme]);
+
+  useEffect(()=> { // auto-scroll when active group's messages change
+    setTimeout(()=> messagesEndRef.current?.scrollIntoView({behavior:'smooth'}), 100);
+  }, [activeGroupId, groups]);
+
+  // create user quickly
+  function quickCreateProfile() {
+    if (!usernameDraft.trim()) return; 
+    const user = {
+      id: uid(),
+      name: usernameDraft.trim(),
+      avatar: DEFAULT_STICKERS[Math.floor(Math.random()*DEFAULT_STICKERS.length)],
+      bio: "A mysterious roleplayer...",
+      stickers: DEFAULT_STICKERS.slice(0,5),
+      color: theme.primary,
+      savedGroups: [],
+      createdAt: now()
     };
+    setMe(user);
+    setUsernameDraft('');
+    // place user into default public group as joined
+    setGroups(prev => prev.map(g => g.id === activeGroupId ? {...g, members: Array.from(new Set([...g.members, user.id]))} : g));
+  }
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+  // create group
+  function createGroup({name, isPrivate}){
+    const g = {id: uid(), name, isPrivate: !!isPrivate, members: me ? [me.id] : [], messages: [{id: uid(), from:'System', type:'text', text: `Group ${name} created.` , t: now()}]};
+    setGroups(prev => [g, ...prev]);
+    setActiveGroupId(g.id);
+  }
 
-    // --- Basic Example: Send a confession ---
-    window.submitConfession = async function () {
-      const confession = document.getElementById("confession").value.trim();
-      if (!confession) return alert("Type your confession first 😈");
+  // join group
+  function joinGroup(gid){
+    if(!me) { alert('Create a profile first.'); return; }
+    setGroups(prev => prev.map(g => g.id===gid ? {...g, members: Array.from(new Set([...g.members, me.id]))} : g));
+  }
 
-      const confRef = ref(db, "confessions");
-      await push(confRef, {
-        text: confession,
-        timestamp: Date.now()
-      });
+  // send message
+  function sendMessage({groupId, msg}){
+    if(!groupId) return;
+    const message = {...msg, id: uid(), t: now()};
+    setGroups(prev => prev.map(g => g.id===groupId ? {...g, messages:[...g.messages, message]} : g));
+    setComposer('');
+  }
 
-      document.getElementById("confession").value = "";
-      alert("Confession submitted anonymously 💋");
+  function handleSendText(){
+    if(!composer.trim()) return;
+    if(!me){ alert('Create a profile to send messages.'); return; }
+    sendMessage({groupId: activeGroupId, msg: {from: me.name, fromId: me.id, type: 'text', text: composer.trim()}});
+  }
+
+  // image upload (demo stores base64 in-memory)
+  function handleAttachImage(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const b64 = reader.result;
+      sendMessage({groupId: activeGroupId, msg: {from: me.name, fromId: me.id, type:'image', src:b64}});
     };
+    reader.readAsDataURL(file);
+  }
 
-    // --- Read all confessions ---
-    const list = document.getElementById("list");
-    const confRef = ref(db, "confessions");
-    onValue(confRef, (snapshot) => {
-      const data = snapshot.val();
-      list.innerHTML = "";
-      for (let id in data) {
-        const li = document.createElement("li");
-        li.textContent = data[id].text;
-        list.appendChild(li);
-      }
-    });
-  </script>
-</head>
-<body style="font-family:sans-serif;text-align:center;padding:20px;">
-  <h1>💋 Confess & Guess: Chaos Edition 💋</h1>
-  <p>Type your anonymous confession below and submit:</p>
+  // voice recording using MediaRecorder
+  async function startRecording(){
+    if(!me){ alert('Create a profile to record audio.'); return; }
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if(e.data.size>0) chunksRef.current.push(e.data); };
+      mr.onstop = ()=>{
+        const blob = new Blob(chunksRef.current, {type:'audio/webm'});
+        const url = URL.createObjectURL(blob);
+        // For demo we store as blob-URL (non-persistent). Replace with upload to storage in production.
+        sendMessage({groupId: activeGroupId, msg: {from: me.name, fromId: me.id, type:'voice', src:url, blobMeta:{size:blob.size, type:blob.type}}});
+      };
+      recorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+    }catch(e){ console.error(e); alert('Microphone access required to record.'); }
+  }
+  function stopRecording(){
+    recorderRef.current?.stop();
+    // stop all tracks
+    recorderRef.current?.stream?.getTracks?.().forEach(t=>t.stop());
+    setIsRecording(false);
+  }
 
-  <textarea id="confession" rows="3" cols="40" placeholder="Enter your spicy secret..."></textarea><br/>
-  <button onclick="submitConfession()">Submit Confession</button>
+  // simple "call" demo: for a demo we open mic and loop audio to local speakers (NOT a real call)
+  const [inCall, setInCall] = useState(false);
+  const callStreamRef = useRef(null);
+  async function startDemoCall(){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({audio:true});
+      callStreamRef.current = s;
+      // simple playback of own audio back to user (local loopback) for demo
+      const audioEl = document.getElementById('local-call-audio');
+      if(audioEl) { audioEl.srcObject = s; audioEl.play().catch(()=>{}); }
+      setInCall(true);
+      // In production: perform WebRTC signaling and set up remote tracks instead
+    }catch(e){ console.error(e); alert('microphone access needed for calls'); }
+  }
+  function endDemoCall(){
+    callStreamRef.current?.getTracks?.forEach(t=>t.stop());
+    const audioEl = document.getElementById('local-call-audio'); if(audioEl){ audioEl.srcObject = null; }
+    setInCall(false);
+  }
 
-  <h2>🔥 Current Confessions 🔥</h2>
-  <ul id="list"></ul>
-</body>
-</html>
+  // profile editing
+  function openMyProfile(){ if(!me) return; setEditingProfile({...me}); setShowProfileModal(true); }
+  function saveProfileEdits(){ setMe(editingProfile); setShowProfileModal(false); }
+
+  // small helpers to find active group
+  const activeGroup = groups.find(g=>g.id===activeGroupId) || groups[0] || null;
+
+  // allow tapping profile to return: when clicking your avatar, restore me from localstorage
+  function tapProfile(){
+    const stored = JSON.parse(localStorage.getItem('rp_me'));
+    if(stored && stored.id === me?.id) { setMe(stored); alert('Welcome back, ' + stored.name); }
+  }
+
+  // quick sticker add
+  function addStickerToProfile(st){ setEditingProfile(prev=> ({...prev, stickers: Array.from(new Set([...(prev?.stickers||[]), st]))})); }
+
+  // change theme color
+  function setThemeColor(key, val){ setTheme(prev=> ({...prev, [key]: val})); }
+
+  // UI small components
+  function GroupList(){
+    return (
+      <div className="p-3">
+        <h3 className="text-sm font-semibold mb-2">Groups</h3>
+        <div className="space-y-2">
+          {groups.map(g=> (
+            <div key={g.id} className={`p-2 rounded-md cursor-pointer ${g.id===activeGroupId? 'ring-2 ring-offset-1':'hover:bg-white/5'}`} onClick={()=> setActiveGroupId(g.id)}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{g.name}</div>
+                  <div className="text-xs opacity-80">{g.isPrivate ? 'Private' : 'Public'} · {g.members.length} members</div>
+                </div>
+                <div>
+                  {g.isPrivate && !g.members.includes(me?.id) ? (
+                    <button className="text-xs px-2 py-1 rounded bg-white/10" onClick={(e)=>{ e.stopPropagation(); joinGroup(g.id); }}>Request Join</button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4">
+          <CreateGroupBox onCreate={createGroup} />
+        </div>
+      </div>
+    );
+  }
+
+  function CreateGroupBox({onCreate}){
+    const [name, setName] = useState('');
+    const [isPrivate, setIsPrivate] = useState(true);
+    return (
+      <div className="p-2 rounded-md border border-white/6">
+        <h4 className="text-xs opacity-80">Create Group</h4>
+        <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Group name" className="w-full mt-2 p-2 rounded bg-white/5 text-sm" />
+        <div className="flex items-center gap-2 mt-2">
+          <label className="text-sm">Private</label>
+          <input type="checkbox" checked={isPrivate} onChange={()=>setIsPrivate(p=>!p)} />
+          <div className="flex-1" />
+          <button className="px-2 py-1 rounded bg-white/10" onClick={()=>{ if(!name.trim()) return alert('Give it a name'); onCreate({name, isPrivate}); setName(''); }}>Create</button>
+        </div>
+      </div>
+    );
+  }
+
+  function MessageBubble({m}){
+    const isMine = m.fromId === me?.id;
+    return (
+      <div className={`mb-3 max-w-[80%] ${isMine? 'ml-auto text-right':'mr-auto text-left'}`}>
+        <div className={`inline-block p-2 rounded-xl ${isMine? 'bg-gradient-to-r from-white/10 to-white/6':'bg-white/5'}`}>
+          <div className="text-xs opacity-80">{m.from}</div>
+          {m.type === 'text' && <div className="mt-1 whitespace-pre-wrap">{m.text}</div>}
+          {m.type === 'image' && <img src={m.src} alt="img" className="mt-2 rounded max-h-60" />}
+          {m.type === 'voice' && (
+            <div className="mt-2 flex items-center gap-2">
+              <audio controls src={m.src}></audio>
+              <div className="text-xs opacity-60">{(m.blobMeta && Math.round(m.blobMeta.size/1024)) || ''} KB</div>
+            </div>
+          )}
+          <div className="text-[10px] opacity-60 mt-1">{new Date(m.t).toLocaleString()}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{'--primary': theme.primary, '--accent': theme.accent, '--bg': theme.bg, '--text': theme.text}} className="min-h-screen text-white" >
+      <div className="min-h-screen flex" style={{background: 'linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--bg)'}}>
+        {/* Sidebar */}
+        <aside className="w-72 bg-black/30 border-r border-white/6 flex-shrink-0">
+          <div className="p-4 border-b border-white/6 flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-2xl cursor-pointer" onClick={()=> { if(me) tapProfile(); else setShowProfileModal(true); }}>
+              {me ? me.avatar : '👋'}
+            </div>
+            <div>
+              <div className="text-sm font-semibold">{me ? me.name : 'Guest'}</div>
+              <div className="text-xs opacity-80">{me ? (me.bio || '') : 'Tap avatar to create profile'}</div>
+            </div>
+          </div>
+          <GroupList />
+          <div className="p-3 border-t border-white/6 mt-auto">
+            <div className="text-xs opacity-80 mb-2">Theme & Profile</div>
+            <div className="flex gap-2">
+              <input type="color" value={theme.primary} onChange={(e)=>setThemeColor('primary', e.target.value)} title="Primary" />
+              <input type="color" value={theme.accent} onChange={(e)=>setThemeColor('accent', e.target.value)} title="Accent" />
+              <input type="color" value={theme.bg} onChange={(e)=>setThemeColor('bg', e.target.value)} title="Background" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs opacity-80">Quick create username</div>
+              <div className="flex gap-2 mt-2">
+                <input className="flex-1 p-2 rounded bg-white/5 text-sm" placeholder="username" value={usernameDraft} onChange={(e)=>setUsernameDraft(e.target.value)} />
+                <button className="px-3 py-2 rounded bg-gradient-to-r" style={{background:`linear-gradient(90deg, ${theme.primary}, ${theme.accent})`}} onClick={quickCreateProfile}>Create</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main chat area */}
+        <main className="flex-1 flex flex-col">
+          {/* header */}
+          <div className="p-4 border-b border-white/6 flex items-center justify-between" style={{background:'linear-gradient(180deg, rgba(255,255,255,0.02), transparent)'}}>
+            <div>
+              <div className="text-lg font-semibold">{activeGroup?.name || 'No group selected'}</div>
+              <div className="text-xs opacity-70">{activeGroup?.isPrivate ? 'Private group' : 'Public group'} · {activeGroup?.members?.length || 0} members</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button className="text-sm px-3 py-1 rounded" onClick={()=>{ if(inCall) { endDemoCall(); } else startDemoCall(); }}>{inCall? 'End Call' : 'Start Call (demo)'}</button>
+              <button className="text-sm px-3 py-1 rounded bg-white/5" onClick={()=> openMyProfile()}>Edit Profile</button>
+            </div>
+          </div>
+
+          {/* messages */}
+          <div className="flex-1 overflow-auto p-4" style={{background:'linear-gradient(180deg, transparent, rgba(255,255,255,0.01))'}}>
+            <div className="space-y-3">
+              {activeGroup?.messages?.map(m=> <MessageBubble key={m.id} m={m} />)}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* composer */}
+          <div className="p-3 border-t border-white/6 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button className="p-2 rounded bg-white/5" onClick={()=> fileInputRef.current?.click()}>📷</button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e)=> handleAttachImage(e.target.files?.[0])} />
+              <button className={`p-2 rounded ${isRecording ? 'bg-red-600':'bg-white/5'}`} onClick={()=> isRecording ? stopRecording() : startRecording()}>{isRecording? '⏹️' : '🎤'}</button>
+              <button className="p-2 rounded bg-white/5" onClick={()=> { setComposer(c=> c + ' *sigh* '); }}>sticker</button>
+            </div>
+            <input value={composer} onChange={(e)=>setComposer(e.target.value)} placeholder="Write a message..." className="flex-1 p-2 rounded bg-white/5" onKeyDown={(e)=> { if(e.key==='Enter') handleSendText(); }} />
+            <button className="px-3 py-2 rounded" style={{background:`linear-gradient(90deg, ${theme.primary}, ${theme.accent})`}} onClick={handleSendText}>Send</button>
+          </div>
+        </main>
+
+        {/* right profile & controls */}
+        <aside className="w-80 bg-black/30 border-l border-white/6 p-4">
+          <div className="text-sm font-semibold mb-2">Active Group Members</div>
+          <div className="space-y-2">
+            {(activeGroup?.members || []).map(mid => {
+              // find user profile stored in "me" only; in full app you'd fetch user details from server
+              const isMe = me?.id === mid;
+              const profile = isMe ? me : {id:mid, name: isMe? me.name : 'Anon', avatar: '🎭', bio:'', stickers: DEFAULT_STICKERS.slice(0,3)};
+              return (
+                <div key={mid} className="flex items-center gap-3 p-2 rounded hover:bg-white/5">
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">{profile.avatar}</div>
+                  <div className="flex-1">
+                    <div className="font-medium">{profile.name}{isMe ? ' (you)' : ''}</div>
+                    <div className="text-xs opacity-70">{profile.bio || 'No bio'}</div>
+                  </div>
+                  <div>
+                    {isMe ? <button className="text-xs px-2 py-1 rounded bg-white/8" onClick={()=> openMyProfile()}>Edit</button> : <button className="text-xs px-2 py-1 rounded bg-white/8" onClick={()=> alert('Profile view is private in this demo.')}>View</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-6">
+            <h4 className="text-sm font-semibold">Profile customizer (preview)</h4>
+            <div className="mt-2 p-2 rounded bg-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-2xl">{me?.avatar}</div>
+                <div>
+                  <div className="font-medium">{me?.name || 'No profile'}</div>
+                  <div className="text-xs opacity-70">{me?.bio || ''}</div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs opacity-80">Stickers</div>
+              <div className="flex gap-2 mt-1">{(me?.stickers||[]).map(s=> <div key={s} className="p-1 rounded bg-white/5">{s}</div>)}</div>
+            </div>
+          </div>
+        </aside>
+
+      </div>
+
+      {/* Profile Modal (only editable by owner) */}
+      {showProfileModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60">
+          <div className="w-[720px] bg-[#071127] rounded-xl p-6">
+            <h3 className="text-lg font-semibold">{editingProfile? 'Edit profile' : 'Create profile'}</h3>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs opacity-80">Avatar (emoji)</label>
+                <input className="w-full p-2 mt-1 rounded bg-white/5" value={editingProfile?.avatar || ''} onChange={(e)=> setEditingProfile(prev=> ({...prev, avatar: e.target.value}))} />
+                <label className="text-xs opacity-80 mt-2 block">Display name</label>
+                <input className="w-full p-2 mt-1 rounded bg-white/5" value={editingProfile?.name || ''} onChange={(e)=> setEditingProfile(prev=> ({...prev, name: e.target.value}))} />
+                <label className="text-xs opacity-80 mt-2 block">Bio</label>
+                <textarea className="w-full p-2 mt-1 rounded bg-white/5" value={editingProfile?.bio || ''} onChange={(e)=> setEditingProfile(prev=> ({...prev, bio: e.target.value}))} />
+                <div className="mt-2 text-xs opacity-80">Choose a color</div>
+                <input type="color" value={editingProfile?.color || theme.primary} onChange={(e)=> setEditingProfile(prev=> ({...prev, color: e.target.value}))} />
+              </div>
+              <div>
+                <div className="text-xs opacity-80">Stickers (click to add)</div>
+                <div className="mt-2 grid grid-cols-5 gap-2">
+                  {DEFAULT_STICKERS.map(s=> <button key={s} className="p-2 rounded bg-white/5" onClick={()=> addStickerToProfile(s)}>{s}</button>)}
+                </div>
+                <div className="mt-4 text-xs opacity-80">Preview</div>
+                <div className="mt-2 p-3 rounded bg-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-2xl">{editingProfile?.avatar}</div>
+                    <div>
+                      <div className="font-medium">{editingProfile?.name}</div>
+                      <div className="text-xs opacity-70">{editingProfile?.bio}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">{(editingProfile?.stickers||[]).map(s=> <div key={s} className="p-1 rounded bg-white/6">{s}</div>)}</div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button className="px-3 py-1 rounded" onClick={()=> { setShowProfileModal(false); setEditingProfile(null); }}>Cancel</button>
+              <button className="px-3 py-1 rounded bg-gradient-to-r" style={{background:`linear-gradient(90deg, ${theme.primary}, ${theme.accent})`}} onClick={saveProfileEdits}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* local audio element for demo call */}
+      <audio id="local-call-audio" style={{display:'none'}} />
+
+    </div>
+  );
+}
